@@ -1,0 +1,42 @@
+# ROS 2 / colcon generated output
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# Large captured lidar data
+bags/
+*.bag
+*.db3
+*.mcap
+*.pcap
+*.pcapng
+*.ply
+*.pcd
+
+# Python / tooling caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Native build artifacts
+build/
+install/
+log/
+*.o
+*.so
+*.a
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+tmp/
+*.tmp
+*.log
