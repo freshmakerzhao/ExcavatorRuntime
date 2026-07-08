@@ -14,25 +14,26 @@
 
 ## 文件说明
 
+当前代码按运行职责分层：
+
+- `apps/perception/`：感知与建图入口，包括实时点云坐标转换、实时 `LocalMap`、OctoMap、OctoMap obstacle 导出和在线几何检查。
+- `apps/planning/`：规划入口，包括 RRT 请求生成、bucket-tip 简单 RRT、轨迹命令和 observation waypoint 切片。
+- `apps/visualization/`：RViz 可视化入口，包括可达区域 marker 和规划轨迹 marker。
+- `apps/data_tools/`：离线/数据工具，包括 bag/npz 导出、离线 pipeline 和 OctoMap 快照保存。
+- `scripts/`：兼容入口层，保留旧命令路径；实际实现转发到 `apps/*`。
+- `localmap_core/`：感知、规划和可视化共享的核心模块，不直接依赖 ROS 节点生命周期。
+
 - `schemas/local_map.schema.json`：第一版 `LocalMap` JSON Schema
 - `examples/mock_local_map.json`：离线 mock 示例，可作为 RRT* 输入样例
-- `scripts/inspect_bag_points.py`：检查 bag 中 `/rslidar_points` 的 frame、字段、点数和范围
-- `scripts/export_first_cloud.py`：导出第一帧点云到 `localmap/exports/`
-- `scripts/export_live_cloud.py`：从在线 `/rslidar_points` 抓一帧并导出为同样格式的 NPZ/CSV
-- `scripts/generate_local_map_from_npz.py`：把离线 NPZ 点云、外参和 target 配置合成第一版 `LocalMap`
-- `scripts/generate_rrt_request_from_local_map.py`：把 `LocalMap`、bucket tip 和 `machine_profile.json` 组织成 RRT* 请求
-- `scripts/generate_mock_trajectory_from_rrt_request.py`：临时生成 mock `TrajectoryCommand`，只用于真实 RRT* 接入前打通下游
-- `scripts/generate_simple_rrt_trajectory_from_request.py`：从 RRT* 请求生成第一版 bucket-tip 简单避障轨迹，默认受 `shared/reachable_workspaces/scale_excavator_workspace.json` 约束
-- `scripts/generate_observation_waypoint_slice.py`：生成 38 维 observation 中 `idx 15..26` 的 waypoint 相关切片
-- `scripts/run_octomap_mapping.sh`：调用官方 `octomap_server_node`，从 `/localmap/machine_root_points` 建 3D 占据图；可用 `OCTOMAP_RESET_INTERVAL_S` 开启近实时刷新
-- `scripts/save_octomap_snapshot.sh`：调用官方 `octomap_saver_node`，保存 `.bt/.ot` OctoMap 快照
-- `scripts/reset_octomap_periodically.sh`：周期调用 `/octomap_server/reset`，用于调试近实时当前视野
-- `scripts/export_octomap_markers_to_local_map.py`：把 OctoMap occupied markers 粗化成 `LocalMap.obstacles`
-- `scripts/publish_trajectory_markers.py`：把 `TrajectoryCommand` 画到 RViz 中，检查 bucket-tip waypoints
-- `scripts/publish_reachable_workspace_markers.py`：把 Unity 导出的 bucket-tip 可达区域画到 RViz 中，检查 RRT 约束空间
-- `scripts/run_perception_stack.sh`：一键启动雷达驱动、实时坐标转换、实时LocalMap、OctoMap和可达区域marker，可选轨迹marker
-- `scripts/run_planning_once.sh`：从当前 OctoMap 一次性生成 LocalMap、RRT请求、轨迹和observation切片
-- `localmap_core/`：可复用的点云变换、过滤、JSON 生成核心代码
+- `scripts/inspect_bag_points.py`：兼容入口，检查 bag 中 `/rslidar_points` 的 frame、字段、点数和范围
+- `scripts/export_first_cloud.py`：兼容入口，导出第一帧点云到 `localmap/exports/`
+- `scripts/export_live_cloud.py`：兼容入口，从在线 `/rslidar_points` 抓一帧并导出为同样格式的 NPZ/CSV
+- `scripts/generate_local_map_from_npz.py`：兼容入口，把离线 NPZ 点云、外参和 target 配置合成第一版 `LocalMap`
+- `scripts/generate_rrt_request_from_local_map.py`：兼容入口，把 `LocalMap`、bucket tip 和 `machine_profile.json` 组织成 RRT* 请求
+- `scripts/generate_simple_rrt_trajectory_from_request.py`：兼容入口，从 RRT* 请求生成第一版 bucket-tip 简单避障轨迹，默认受 `shared/reachable_workspaces/scale_excavator_workspace.json` 约束
+- `scripts/generate_observation_waypoint_slice.py`：兼容入口，生成 38 维 observation 中 `idx 15..26` 的 waypoint 相关切片
+- `scripts/run_perception_stack.sh`：兼容入口，一键启动雷达驱动、实时坐标转换、实时LocalMap、OctoMap和可达区域marker，可选轨迹marker
+- `scripts/run_planning_once.sh`：兼容入口，从当前 OctoMap 一次性生成 LocalMap、RRT请求、轨迹和observation切片
 - `config/extrinsics_rslidar_to_machine_root.measured.json`：当前实测 `rslidar -> machine_root` 外参
 - `config/targets.mock.json`：占位 dig/dump target，后续由任务配置或感知模块生成
 - `config/bucket_tip.machine_root.measured.json`：占位 bucket tip，真机运行时由状态估计/FK提供
