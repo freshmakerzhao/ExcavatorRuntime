@@ -1,4 +1,4 @@
-# AiryLidar LocalMap 离线开发入口
+# ExcavatorRuntime LocalMap 离线开发入口
 
 这个目录只做雷达感知到 `LocalMap` 的最小输入契约和离线工具，不做真机 PWM/UDP 控制，不修改 Unity 旧场景，也不修改 vendor SDK。
 
@@ -54,13 +54,13 @@ ROS2 Jazzy 的 Python 扩展依赖系统 Python 3.12。当前机器如果 shell 
 原 `/home/zhaoshuai/workspace_uinty/RL_prj/TF` 项目已经作为源码子模块纳入：
 
 ```text
-AiryLidar/kinematics/excavator_kinematics
+ExcavatorRuntime/kinematics/excavator_kinematics
 ```
 
 `ros2_ws/src/excavator_kinematics` 是指向该源码目录的软连接，便于在同一个 ROS2 overlay 中编译：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws
 source /opt/ros/jazzy/setup.zsh
 colcon build --symlink-install --packages-select excavator_kinematics
 source install/setup.zsh
@@ -69,9 +69,9 @@ source install/setup.zsh
 启动 FK/TF 节点：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
-source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
 ros2 launch excavator_kinematics excavator_tf.launch.py
 ```
@@ -91,9 +91,9 @@ X right, Y up, Z forward
 桥接节点把 bucket tip 位置转换到 `machine_root` 并持续写出 JSON：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
-source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
 /usr/bin/python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
   --input-topic /bucket_tip_pose_base \
@@ -124,8 +124,8 @@ RUN_BUCKET_TIP_BRIDGE=1 localmap/scripts/run_perception_stack.sh
 cd /home/zhaoshuai/workspace_uinty/RL_prj
 source /opt/ros/jazzy/setup.zsh
 
-/usr/bin/python3 AiryLidar/localmap/scripts/inspect_bag_points.py \
-  AiryLidar/bags/airy_20260706_202359 \
+/usr/bin/python3 ExcavatorRuntime/localmap/scripts/inspect_bag_points.py \
+  ExcavatorRuntime/bags/airy_20260706_202359 \
   --frames 3
 ```
 
@@ -135,22 +135,22 @@ source /opt/ros/jazzy/setup.zsh
 cd /home/zhaoshuai/workspace_uinty/RL_prj
 source /opt/ros/jazzy/setup.zsh
 
-/usr/bin/python3 AiryLidar/localmap/scripts/export_first_cloud.py \
-  AiryLidar/bags/airy_20260706_202359 \
+/usr/bin/python3 ExcavatorRuntime/localmap/scripts/export_first_cloud.py \
+  ExcavatorRuntime/bags/airy_20260706_202359 \
   --max-csv-points 2000
 ```
 
 输出：
 
-- `AiryLidar/localmap/exports/rslidar_points_first_frame.npz`
-- `AiryLidar/localmap/exports/rslidar_points_first_frame_sample.csv`
+- `ExcavatorRuntime/localmap/exports/rslidar_points_first_frame.npz`
+- `ExcavatorRuntime/localmap/exports/rslidar_points_first_frame_sample.csv`
 
 从在线 `/rslidar_points` 抓一帧：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
-source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
 /usr/bin/python3 localmap/scripts/export_live_cloud.py \
   --output-dir localmap/exports/live_latest \
@@ -159,17 +159,17 @@ source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zs
 
 输出：
 
-- `AiryLidar/localmap/exports/live_latest/rslidar_points_live_frame.npz`
-- `AiryLidar/localmap/exports/live_latest/rslidar_points_live_frame_sample.csv`
+- `ExcavatorRuntime/localmap/exports/live_latest/rslidar_points_live_frame.npz`
+- `ExcavatorRuntime/localmap/exports/live_latest/rslidar_points_live_frame_sample.csv`
 
 这一步只抓一帧，不替代后续实时 LocalMap 节点；它用于确认在线 topic 可以进入和离线 bag 相同的数据处理入口。
 
 实时发布 `machine_root` 点云：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
-source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
 /usr/bin/python3 localmap/scripts/transform_live_cloud_to_base.py \
   --input-topic /rslidar_points \
@@ -187,7 +187,7 @@ source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zs
 RViz 查看转换后点云：
 
 ```bash
-rviz2 -d /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/rviz/airy_points.rviz
+rviz2 -d /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/rviz/airy_points.rviz
 ```
 
 在 RViz 中建议：
@@ -228,9 +228,9 @@ ros2 topic echo /localmap/machine_root_points --once --field header
 单独发布可达区域 marker：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
-source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
 /usr/bin/python3 localmap/scripts/publish_reachable_workspace_markers.py \
   --workspace /home/zhaoshuai/workspace_uinty/RL_prj/shared/reachable_workspaces/scale_excavator_workspace.json \
@@ -242,9 +242,9 @@ source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zs
 实时生成最小 `LocalMap`：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
-source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
 /usr/bin/python3 localmap/scripts/run_live_local_map_node.py \
   --input-topic /localmap/machine_root_points \
@@ -274,7 +274,7 @@ ros2 topic echo /localmap/local_map_json --once
 生成第一版 `LocalMap`：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
 /usr/bin/python3 localmap/scripts/generate_local_map_from_npz.py
 ```
@@ -282,7 +282,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 如果要临时裁剪 base frame 点云，可以传入：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
 /usr/bin/python3 localmap/scripts/generate_local_map_from_npz.py \
   --bounds -2.0 4.0 -3.0 3.0 -0.2 2.0
@@ -290,12 +290,12 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 
 输出：
 
-- `AiryLidar/localmap/exports/local_map_from_npz.mock.json`
+- `ExcavatorRuntime/localmap/exports/local_map_from_npz.mock.json`
 
 检查外参配置：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
 /usr/bin/python3 localmap/scripts/inspect_extrinsics.py \
   --extrinsics localmap/config/extrinsics_rslidar_to_machine_root.measured.json
@@ -304,7 +304,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 用 `machine_root` 外参生成 LocalMap：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
 /usr/bin/python3 localmap/scripts/generate_local_map_from_npz.py \
   --npz localmap/exports/airy_20260707_095607/rslidar_points_first_frame.npz \
@@ -322,40 +322,40 @@ machine_root
 生成 RRT* 请求：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
 /usr/bin/python3 localmap/scripts/generate_rrt_request_from_local_map.py
 ```
 
 输出：
 
-- `AiryLidar/localmap/exports/rrt_star_request.mock.json`
+- `ExcavatorRuntime/localmap/exports/rrt_star_request.mock.json`
 
 临时生成 mock 轨迹命令：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
 /usr/bin/python3 localmap/scripts/generate_mock_trajectory_from_rrt_request.py
 ```
 
 输出：
 
-- `AiryLidar/localmap/exports/trajectory_command.mock.json`
+- `ExcavatorRuntime/localmap/exports/trajectory_command.mock.json`
 
 注意：这个脚本不是 RRT*，只是用直线 waypoint 打通接口。真实接入时替换这一段，不改上下游 JSON 契约。
 
 生成 observation waypoint 切片：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
 /usr/bin/python3 localmap/scripts/generate_observation_waypoint_slice.py
 ```
 
 输出：
 
-- `AiryLidar/localmap/exports/observation_waypoint_slice.mock.json`
+- `ExcavatorRuntime/localmap/exports/observation_waypoint_slice.mock.json`
 
 该文件只覆盖 38 维 observation 的以下位置：
 
@@ -371,7 +371,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 一键运行离线 pipeline：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 
 export BAG_DIR=bags/airy_repositioned_20260707_152018
@@ -409,14 +409,14 @@ export EXPORT_DIR=localmap/exports/$(basename "$BAG_DIR")
 运行关键测试：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
 /usr/bin/python3 -m unittest discover -s localmap/tests -p 'test_*.py'
 ```
 
 ## 已验证的离线 bag 摘要
 
-当前录包 `AiryLidar/bags/airy_20260706_202359` 中：
+当前录包 `ExcavatorRuntime/bags/airy_20260706_202359` 中：
 
 - `/rslidar_points`：196 帧，约 10 Hz
 - `/rslidar_imu_data`：3923 帧，约 200 Hz

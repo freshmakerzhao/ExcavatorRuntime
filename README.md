@@ -1,6 +1,6 @@
-# AiryLidar
+# ExcavatorRuntime
 
-AiryLidar 是缩比挖掘机真机侧的感知、局部地图、bucket-tip 规划实验工程。
+ExcavatorRuntime 是缩比挖掘机真机侧的感知、局部地图、bucket-tip 规划实验工程。
 
 当前只做：
 
@@ -33,14 +33,14 @@ docs/                    # 雷达接线、端口、防火墙等运行笔记
 ## 1. 准备环境
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 ```
 
 首次或源码变化后编译 overlay：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws
 source /opt/ros/jazzy/setup.zsh
 colcon build --symlink-install
 source install/setup.zsh
@@ -87,7 +87,7 @@ sudo ufw allow in on enp130s0 from 192.168.1.200 to 192.168.1.103 proto udp port
 一个终端启动：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source ros2_ws/install/setup.zsh
 
@@ -127,7 +127,7 @@ python3 -m json.tool localmap/exports/live_latest/local_map.live.json | sed -n '
 另一个终端：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source ros2_ws/install/setup.zsh
 rviz2 -d rviz/airy_points.rviz
@@ -150,7 +150,7 @@ Axes: machine_root                         # 坐标原点和方向
 启动 FK / TF：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source ros2_ws/install/setup.zsh
 
@@ -204,7 +204,7 @@ python3 -m json.tool localmap/exports/live_latest/bucket_tip.machine_root.live.j
 感知栈运行后，在新终端执行一次规划：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source ros2_ws/install/setup.zsh
 

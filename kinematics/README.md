@@ -1,6 +1,6 @@
 # Kinematics 子模块
 
-本目录接收原 `/home/zhaoshuai/workspace_uinty/RL_prj/TF` 项目的源码，用于在 AiryLidar 统一工程内管理 bucket tip 正运动学。
+本目录接收原 `/home/zhaoshuai/workspace_uinty/RL_prj/TF` 项目的源码，用于在 ExcavatorRuntime 统一工程内管理 bucket tip 正运动学。
 
 ## 边界
 
@@ -24,7 +24,7 @@ kinematics/excavator_kinematics
 ros2_ws/src/excavator_kinematics -> ../../kinematics/excavator_kinematics
 ```
 
-这个软连接让 `colcon build` 可以在 AiryLidar 的 `ros2_ws` 中同时编译雷达 SDK 和运动学包，而源码仍按项目职责放在 `kinematics/` 下。
+这个软连接让 `colcon build` 可以在 ExcavatorRuntime 的 `ros2_ws` 中同时编译雷达 SDK 和运动学包，而源码仍按项目职责放在 `kinematics/` 下。
 
 ## 坐标桥接
 
@@ -36,7 +36,7 @@ Y left
 Z up
 ```
 
-AiryLidar 当前规划坐标使用 Unity/MachineRoot 约定：
+ExcavatorRuntime 当前规划坐标使用 Unity/MachineRoot 约定：
 
 ```text
 X right
@@ -63,7 +63,7 @@ localmap/config/bucket_tip_tf_bridge.machine_root.json
 ## 编译
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws
 source /opt/ros/jazzy/setup.zsh
 colcon build --symlink-install --packages-select excavator_kinematics
 source install/setup.zsh
@@ -74,9 +74,9 @@ source install/setup.zsh
 启动运动学节点：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
-source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
 ros2 launch excavator_kinematics excavator_tf.launch.py
 ```
