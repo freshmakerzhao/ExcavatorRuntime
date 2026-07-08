@@ -1,0 +1,5 @@
+# 默认所有文件改动都需要仓库负责人 review。
+* @freshmakerzhao
+
+# CODEOWNERS 自身也必须由仓库负责人 review。
+/.github/CODEOWNERS @freshmakerzhao
