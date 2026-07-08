@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rl-excavator.local/schemas/observation_waypoint_slice.schema.json",
+  "title": "RL Excavator Observation Waypoint Slice",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "frame_id",
+    "indices",
+    "values",
+    "current_waypoint_index",
+    "waypoint_count"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "observation_waypoint_slice.v1"
+    },
+    "frame_id": {
+      "type": "string"
+    },
+    "indices": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": 15
+        },
+        {
+          "const": 16
+        },
+        {
+          "const": 17
+        },
+        {
+          "const": 18
+        },
+        {
+          "const": 19
+        },
+        {
+          "const": 20
+        },
+        {
+          "const": 21
+        },
+        {
+          "const": 22
+        },
+        {
+          "const": 23
+        },
+        {
+          "const": 24
+        },
+        {
+          "const": 25
+        },
+        {
+          "const": 26
+        }
+      ],
+      "minItems": 12,
+      "maxItems": 12
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 12,
+      "maxItems": 12
+    },
+    "current_waypoint_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "waypoint_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

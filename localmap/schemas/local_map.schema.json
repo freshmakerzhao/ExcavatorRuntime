@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rl-excavator.local/schemas/local_map.schema.json",
+  "title": "RL Excavator LocalMap",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "timestamp_s",
+    "frame_id",
+    "source",
+    "ground",
+    "obstacles",
+    "dig_targets",
+    "dump_targets"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "local_map.v1"
+    },
+    "timestamp_s": {
+      "type": "number",
+      "description": "LocalMap生成时刻，单位秒。"
+    },
+    "frame_id": {
+      "type": "string",
+      "description": "LocalMap坐标系。阶段A应使用machine_root；未来SLAM可扩展为map。"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_topic",
+        "raw_frame_id",
+        "raw_point_type",
+        "machine_root",
+        "extrinsics"
+      ],
+      "properties": {
+        "raw_topic": {
+          "type": "string",
+          "description": "原始点云topic，例如/rslidar_points。"
+        },
+        "raw_frame_id": {
+          "type": "string",
+          "description": "原始点云frame，例如rslidar。"
+        },
+        "raw_point_type": {
+          "type": "string",
+          "description": "原始点类型，例如XYZIRT。"
+        },
+        "bag_path": {
+          "type": "string",
+          "description": "离线数据来源，可为空或省略。"
+        },
+        "machine_root": {
+          "type": "string",
+          "description": "挖掘机根坐标系，例如machine_root。"
+        },
+        "extrinsics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "from_frame",
+            "to_frame",
+            "translation_m",
+            "status"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "外参版本号或标定记录ID。"
+            },
+            "from_frame": {
+              "type": "string"
+            },
+            "to_frame": {
+              "type": "string"
+            },
+            "translation_m": {
+              "$ref": "#/$defs/vec3"
+            },
+            "transform_kind": {
+              "type": "string",
+              "enum": [
+                "rpy",
+                "axis_mapping_matrix"
+              ]
+            },
+            "rotation_rpy_rad": {
+              "$ref": "#/$defs/vec3"
+            },
+            "axis_mapping_matrix": {
+              "$ref": "#/$defs/mat3"
+            },
+            "matrix_determinant": {
+              "type": "number"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "mock",
+                "measured",
+                "calibrated"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "ground": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "confidence"
+      ],
+      "properties": {
+        "model": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ground_plane"
+            },
+            {
+              "$ref": "#/$defs/ground_height_grid"
+            }
+          ]
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence"
+        }
+      }
+    },
+    "obstacles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/obstacle"
+      }
+    },
+    "dig_targets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/target"
+      }
+    },
+    "dump_targets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dump_target"
+      }
+    },
+    "rrt_star_hint": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "给RRT*的可选提示，不替代RRT*输入状态。",
+      "properties": {
+        "planning_frame_id": {
+          "type": "string"
+        },
+        "preferred_dig_target_id": {
+          "type": "string"
+        },
+        "preferred_dump_target_id": {
+          "type": "string"
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "vec3": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "mat3": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/vec3"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "ground_plane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "normal",
+        "offset_m"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "plane"
+        },
+        "normal": {
+          "$ref": "#/$defs/vec3"
+        },
+        "offset_m": {
+          "type": "number",
+          "description": "平面方程normal dot p + offset_m = 0。"
+        }
+      }
+    },
+    "ground_height_grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "origin_m",
+        "resolution_m",
+        "size_xy",
+        "height_m"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "height_grid"
+        },
+        "origin_m": {
+          "$ref": "#/$defs/vec3"
+        },
+        "resolution_m": {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        "size_xy": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "integer",
+              "minimum": 1
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "height_m": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "obstacle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "shape",
+        "center_m",
+        "confidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "shape": {
+          "type": "string",
+          "enum": [
+            "box",
+            "sphere",
+            "cylinder"
+          ]
+        },
+        "center_m": {
+          "$ref": "#/$defs/vec3"
+        },
+        "size_m": {
+          "$ref": "#/$defs/vec3"
+        },
+        "radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        "height_m": {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "mock",
+            "lidar",
+            "manual"
+          ]
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "position_m",
+        "normal",
+        "radius_m",
+        "confidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "position_m": {
+          "$ref": "#/$defs/vec3"
+        },
+        "normal": {
+          "$ref": "#/$defs/vec3"
+        },
+        "radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence"
+        }
+      }
+    },
+    "dump_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "position_m",
+        "normal",
+        "radius_m",
+        "confidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "position_m": {
+          "$ref": "#/$defs/vec3"
+        },
+        "normal": {
+          "$ref": "#/$defs/vec3"
+        },
+        "radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        "release_height_m": {
+          "type": "number"
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence"
+        }
+      }
+    }
+  }
+}

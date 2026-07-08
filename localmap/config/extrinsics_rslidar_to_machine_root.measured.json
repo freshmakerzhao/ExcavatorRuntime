@@ -1,0 +1,46 @@
+{
+  "id": "T_machine_root_rslidar.measured.v1",
+  "from_frame": "rslidar",
+  "to_frame": "machine_root",
+  "translation_m": [
+    1.3,
+    0.624,
+    0.3
+  ],
+  "axis_mapping_matrix": [
+    [
+      0.0,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    [
+      1.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "status": "measured",
+  "frame_convention": {
+    "machine_root": {
+      "+X": "挖掘机右侧，对齐Unity MachineRoot local +X / red axis",
+      "+Y": "挖掘机上方，对齐Unity MachineRoot local +Y / green axis",
+      "+Z": "挖掘机前方/工作方向，对齐Unity MachineRoot local +Z / blue axis"
+    },
+    "mapping": {
+      "rslidar +X": "machine_root +Z",
+      "rslidar +Y": "machine_root +X",
+      "rslidar +Z": "machine_root -Y"
+    },
+    "translation_definition": "rslidar原点在machine_root下的位置，单位米"
+  },
+  "measurement_notes": [
+    "2026-07-08基于实测MachineRoot后的第一版真机/仿真统一外参。",
+    "雷达原点相对MachineRoot: x=1.30m, y=0.624m, z=0.30m。",
+    "axis_mapping_matrix沿用当前倒置雷达支架姿态：rslidar +X -> machine_root +Z, +Y -> +X, +Z -> -Y。"
+  ]
+}

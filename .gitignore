@@ -5,11 +5,15 @@ ros2_ws/log/
 
 # Large captured lidar data
 bags/
+localmap/exports/
+knowledge/
 *.bag
 *.db3
 *.mcap
 *.pcap
 *.pcapng
+*.npy
+*.npz
 *.ply
 *.pcd
 

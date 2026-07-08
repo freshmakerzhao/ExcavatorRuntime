@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rl-excavator.local/schemas/trajectory_command.schema.json",
+  "title": "RL Excavator Trajectory Command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "timestamp_s",
+    "frame_id",
+    "task_mode",
+    "target_bucket_pitch_deg",
+    "waypoints_base",
+    "waypoint_count",
+    "target_threshold",
+    "tube_radius"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "trajectory_command.v1"
+    },
+    "timestamp_s": {
+      "type": "number"
+    },
+    "frame_id": {
+      "type": "string"
+    },
+    "task_mode": {
+      "type": "string",
+      "enum": [
+        "MoveToDig",
+        "CarryMaterial"
+      ]
+    },
+    "target_bucket_pitch_deg": {
+      "type": "number"
+    },
+    "waypoints_base": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/vec3"
+      }
+    },
+    "waypoint_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "target_threshold": {
+      "type": "number",
+      "exclusiveMinimum": 0.0
+    },
+    "tube_radius": {
+      "type": "number",
+      "exclusiveMinimum": 0.0
+    }
+  },
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "minItems": 3,
+      "maxItems": 3
+    }
+  }
+}

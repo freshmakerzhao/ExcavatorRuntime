@@ -1,0 +1,37 @@
+{
+  "dig_targets": [
+    {
+      "id": "mock_dig_001",
+      "position_m": [
+        0.4045,
+        -0.1048,
+        0.2135
+      ],
+      "normal": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "radius_m": 0.35,
+      "confidence": 0.5
+    }
+  ],
+  "dump_targets": [
+    {
+      "id": "mock_dump_001",
+      "position_m": [
+        -0.2719,
+        -0.3878,
+        0.5284
+      ],
+      "normal": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "radius_m": 0.45,
+      "release_height_m": 0.8,
+      "confidence": 0.5
+    }
+  ]
+}

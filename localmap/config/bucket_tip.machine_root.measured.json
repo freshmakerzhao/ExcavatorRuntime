@@ -1,0 +1,14 @@
+{
+  "frame_id": "machine_root",
+  "position_m": [
+    0.1587,
+    -0.0297,
+    0.5289
+  ],
+  "status": "placeholder",
+  "notes": [
+    "machine_root下的bucket tip位置，占位值用于离线链路联调。",
+    "真实验证时应由状态估计/FK提供bucket tip在machine_root下的位置，单位米。",
+    "该点会作为RRT*规划起点，并用于生成ONNX observation中waypoint相对误差。"
+  ]
+}
