@@ -1,0 +1,33 @@
+{
+  "id": "T_machine_root_base_link_bucket_tip_bridge.v1",
+  "source_frame": "base_link",
+  "target_frame": "machine_root",
+  "translation_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "axis_mapping_matrix": [
+    [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "status": "initial_axis_mapping",
+  "notes": [
+    "用于把TF项目中的ROS约定base_link bucket tip转换到AiryLidar/Unity machine_root。",
+    "默认假设base_link原点与machine_root原点等价；如果实测不同，应修改translation_m。",
+    "轴约定：ROS +X forward -> machine_root +Z, ROS +Y left -> machine_root -X, ROS +Z up -> machine_root +Y。"
+  ]
+}

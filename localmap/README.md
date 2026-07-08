@@ -30,6 +30,7 @@
 - `scripts/export_live_cloud.py`：兼容入口，从在线 `/rslidar_points` 抓一帧并导出为同样格式的 NPZ/CSV
 - `scripts/generate_local_map_from_npz.py`：兼容入口，把离线 NPZ 点云、外参和 target 配置合成第一版 `LocalMap`
 - `scripts/generate_rrt_request_from_local_map.py`：兼容入口，把 `LocalMap`、bucket tip 和 `machine_profile.json` 组织成 RRT* 请求
+- `scripts/bridge_bucket_tip_from_tf.py`：兼容入口，把运动学包输出的 `/bucket_tip_pose_base` 转成 `machine_root` bucket tip JSON
 - `scripts/generate_simple_rrt_trajectory_from_request.py`：兼容入口，从 RRT* 请求生成第一版 bucket-tip 简单避障轨迹，默认受 `shared/reachable_workspaces/scale_excavator_workspace.json` 约束
 - `scripts/generate_observation_waypoint_slice.py`：兼容入口，生成 38 维 observation 中 `idx 15..26` 的 waypoint 相关切片
 - `scripts/run_perception_stack.sh`：兼容入口，一键启动雷达驱动、实时坐标转换、实时LocalMap、OctoMap和可达区域marker，可选轨迹marker
@@ -37,6 +38,7 @@
 - `config/extrinsics_rslidar_to_machine_root.measured.json`：当前实测 `rslidar -> machine_root` 外参
 - `config/targets.mock.json`：占位 dig/dump target，后续由任务配置或感知模块生成
 - `config/bucket_tip.machine_root.measured.json`：占位 bucket tip，真机运行时由状态估计/FK提供
+- `config/bucket_tip_tf_bridge.machine_root.json`：`base_link` bucket tip 到 `machine_root` bucket tip 的坐标桥接配置
 - `docs/octomap_integration_plan.md`：OctoMap 接入路线、运行命令和后续 LocalMap/RRT* 适配计划
 - `tests/test_localmap_pipeline.py`：少量关键行为测试，覆盖外参变换、NaN过滤、LocalMap生成
 - `tests/test_trajectory_contracts.py`：少量契约测试，覆盖 RRT* 请求、轨迹命令和 observation waypoint 切片
@@ -59,6 +61,77 @@
 ## 推荐运行方式
 
 ROS2 Jazzy 的 Python 扩展依赖系统 Python 3.12。当前机器如果 shell 在 conda 环境中，建议显式使用 `/usr/bin/python3`。
+
+## 运动学 TF 接入
+
+原 `/home/zhaoshuai/workspace_uinty/RL_prj/TF` 项目已经作为源码子模块纳入：
+
+```text
+AiryLidar/kinematics/excavator_kinematics
+```
+
+`ros2_ws/src/excavator_kinematics` 是指向该源码目录的软连接，便于在同一个 ROS2 overlay 中编译：
+
+```bash
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws
+source /opt/ros/jazzy/setup.zsh
+colcon build --symlink-install --packages-select excavator_kinematics
+source install/setup.zsh
+```
+
+启动 FK/TF 节点：
+
+```bash
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+source /opt/ros/jazzy/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+
+ros2 launch excavator_kinematics excavator_tf.launch.py
+```
+
+TF 包输出的 `/bucket_tip_pose_base` 使用 ROS 坐标约定：
+
+```text
+X forward, Y left, Z up
+```
+
+规划链路使用 Unity/MachineRoot 约定：
+
+```text
+X right, Y up, Z forward
+```
+
+桥接节点把 bucket tip 位置转换到 `machine_root` 并持续写出 JSON：
+
+```bash
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+source /opt/ros/jazzy/setup.zsh
+source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
+
+/usr/bin/python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
+  --input-topic /bucket_tip_pose_base \
+  --output-topic /localmap/bucket_tip_machine_root_pose \
+  --bridge localmap/config/bucket_tip_tf_bridge.machine_root.json \
+  --output-json localmap/exports/live_latest/bucket_tip.machine_root.live.json
+```
+
+`localmap/scripts/run_planning_once.sh` 会优先读取 live JSON：
+
+```text
+localmap/exports/live_latest/bucket_tip.machine_root.live.json
+```
+
+如果 live JSON 不存在，则回退到：
+
+```text
+localmap/config/bucket_tip.machine_root.measured.json
+```
+
+一键感知栈默认不启动 bucket tip bridge；如果 TF 节点已经在运行，可以打开：
+
+```bash
+RUN_BUCKET_TIP_BRIDGE=1 localmap/scripts/run_perception_stack.sh
+```
 
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj

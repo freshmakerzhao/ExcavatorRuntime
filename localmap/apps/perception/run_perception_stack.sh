@@ -21,7 +21,10 @@ RUN_LIVE_LOCAL_MAP="${RUN_LIVE_LOCAL_MAP:-1}"
 RUN_OCTOMAP="${RUN_OCTOMAP:-1}"
 RUN_REACHABLE_WORKSPACE_MARKERS="${RUN_REACHABLE_WORKSPACE_MARKERS:-1}"
 RUN_TRAJECTORY_MARKERS="${RUN_TRAJECTORY_MARKERS:-0}"
+RUN_BUCKET_TIP_BRIDGE="${RUN_BUCKET_TIP_BRIDGE:-0}"
 TRAJECTORY_JSON="${TRAJECTORY_JSON:-${AIRY_ROOT}/localmap/exports/live_latest/trajectory_command.simple_rrt.json}"
+BUCKET_TIP_BRIDGE_CONFIG="${BUCKET_TIP_BRIDGE_CONFIG:-${AIRY_ROOT}/localmap/config/bucket_tip_tf_bridge.machine_root.json}"
+BUCKET_TIP_JSON="${BUCKET_TIP_JSON:-${AIRY_ROOT}/localmap/exports/live_latest/bucket_tip.machine_root.live.json}"
 REACHABLE_WORKSPACE_JSON="${REACHABLE_WORKSPACE_JSON:-${AIRY_ROOT}/../shared/reachable_workspaces/scale_excavator_workspace.json}"
 WORKSPACE_MODE="${WORKSPACE_MODE:-MoveToDig}"
 TARGETS_JSON="${TARGETS_JSON:-${AIRY_ROOT}/localmap/config/targets.mock.json}"
@@ -91,6 +94,16 @@ if [[ "${RUN_REACHABLE_WORKSPACE_MARKERS}" == "1" ]]; then
       --mode "${WORKSPACE_MODE}"
 fi
 
+if [[ "${RUN_BUCKET_TIP_BRIDGE}" == "1" ]]; then
+  # 关键：只有TF/FK节点已经发布 /bucket_tip_pose_base 时才需要打开；纯雷达调试默认关闭。
+  start_process bucket_tip_tf_bridge \
+    /usr/bin/python3 "${AIRY_ROOT}/localmap/scripts/bridge_bucket_tip_from_tf.py" \
+      --input-topic /bucket_tip_pose_base \
+      --output-topic /localmap/bucket_tip_machine_root_pose \
+      --bridge "${BUCKET_TIP_BRIDGE_CONFIG}" \
+      --output-json "${BUCKET_TIP_JSON}"
+fi
+
 if [[ "${RUN_TRAJECTORY_MARKERS}" == "1" ]]; then
   start_process trajectory_markers \
     /usr/bin/python3 "${AIRY_ROOT}/localmap/scripts/publish_trajectory_markers.py" \
@@ -105,6 +118,7 @@ cat <<EOF
   ros2 topic hz /localmap/machine_root_points
   /usr/bin/python3 -m json.tool ${LIVE_LOCAL_MAP_JSON} | sed -n '1,40p'
   ros2 topic hz /occupied_cells_vis_array
+  RUN_BUCKET_TIP_BRIDGE=1 时再检查：ros2 topic echo /localmap/bucket_tip_machine_root_pose --once
 
 日志目录：
   ${AIRY_ROOT}/runtime/logs

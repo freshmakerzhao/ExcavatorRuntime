@@ -18,7 +18,15 @@ BASE_LOCAL_MAP_JSON="${BASE_LOCAL_MAP_JSON:-${EXPORT_DIR}/local_map.live.json}"
 RRT_REQUEST_JSON="${RRT_REQUEST_JSON:-${EXPORT_DIR}/rrt_star_request.octomap_obstacles.json}"
 TRAJECTORY_JSON="${TRAJECTORY_JSON:-${EXPORT_DIR}/trajectory_command.simple_rrt.json}"
 OBS_SLICE_JSON="${OBS_SLICE_JSON:-${EXPORT_DIR}/observation_waypoint_slice.simple_rrt.json}"
-BUCKET_TIP_JSON="${BUCKET_TIP_JSON:-${AIRY_ROOT}/localmap/config/bucket_tip.machine_root.measured.json}"
+LIVE_BUCKET_TIP_JSON="${LIVE_BUCKET_TIP_JSON:-${EXPORT_DIR}/bucket_tip.machine_root.live.json}"
+FALLBACK_BUCKET_TIP_JSON="${FALLBACK_BUCKET_TIP_JSON:-${AIRY_ROOT}/localmap/config/bucket_tip.machine_root.measured.json}"
+if [[ -z "${BUCKET_TIP_JSON:-}" ]]; then
+  if [[ -f "${LIVE_BUCKET_TIP_JSON}" ]]; then
+    BUCKET_TIP_JSON="${LIVE_BUCKET_TIP_JSON}"
+  else
+    BUCKET_TIP_JSON="${FALLBACK_BUCKET_TIP_JSON}"
+  fi
+fi
 REACHABLE_WORKSPACE_JSON="${REACHABLE_WORKSPACE_JSON:-${AIRY_ROOT}/../shared/reachable_workspaces/scale_excavator_workspace.json}"
 WORKSPACE_MODE="${WORKSPACE_MODE:-MoveToDig}"
 USE_REACHABLE_WORKSPACE="${USE_REACHABLE_WORKSPACE:-1}"
@@ -72,6 +80,7 @@ echo "1/4 导出OctoMap obstacles -> LocalMap"
   --output "${LOCAL_MAP_JSON}"
 
 echo "2/4 生成RRT请求"
+echo "    bucket tip: ${BUCKET_TIP_JSON}"
 /usr/bin/python3 "${AIRY_ROOT}/localmap/scripts/generate_rrt_request_from_local_map.py" \
   --local-map "${LOCAL_MAP_JSON}" \
   --bucket-tip "${BUCKET_TIP_JSON}" \
