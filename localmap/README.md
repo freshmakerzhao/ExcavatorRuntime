@@ -45,19 +45,6 @@
 - `tests/test_reachable_workspace.py`：少量可达区域测试，覆盖 20 点可达体 inside 判断和 RRT waypoint 约束
 - `exports/`：本地导出产物，已在 `.gitignore` 中忽略
 
-## 本轮使用的 skill
-
-当前会话可用的相关 skill 中，本轮实际使用：
-
-- `tdd`：用于按“一个行为一个测试”的方式推进，不写大批量无意义测试。
-
-后续如果进入具体问题，可按需使用：
-
-- `diagnose`：雷达驱动、ROS topic、bag 读取或坐标异常时使用。
-- `review`：提交前检查新增链路是否偏离设计约束。
-- `unity-mcp-orchestrator`：未来需要通过 Unity MCP 操作新测试场景时使用。
-- `handoff`：阶段结束时整理上下文交给新窗口继续。
-
 ## 推荐运行方式
 
 ROS2 Jazzy 的 Python 扩展依赖系统 Python 3.12。当前机器如果 shell 在 conda 环境中，建议显式使用 `/usr/bin/python3`。
