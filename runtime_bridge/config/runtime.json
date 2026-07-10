@@ -1,5 +1,5 @@
 {
-  "schema": "runtime_bridge_config_v1",
+  "schema": "runtime_bridge_config_v2",
   "network": {
     "state_bind_host": "0.0.0.0",
     "state_port": 18081,
@@ -16,6 +16,14 @@
   },
   "policy": {
     "bucket_tip_timeout_ms": 500
+  },
+  "fixed_action": {
+    "kp": 1.5,
+    "min_action": 0.08,
+    "max_action": 1.0,
+    "tolerance": 0.03,
+    "step_timeout_s": 3.0,
+    "hold_s": 0.15
   },
   "diagnostics": {
     "print_every": 1,

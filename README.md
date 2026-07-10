@@ -332,34 +332,16 @@ ONNX 输出在 PC 内部仍按训练语义视为 `[-1, 1]` 策略动作；发给
 到达挖掘点或倾倒点后，可以临时用固定动作脚本执行挖掘/倾倒。该脚本不做路径规划，后续由外部 planner 决定何时启动：
 
 ```bash
-python3 runtime_bridge/apps/fixed_action_player.py \
-  --action dig \
-  --state-bind-host 0.0.0.0 \
-  --state-port 18081 \
-  --orin-host 192.168.2.88 \
-  --action-port 18082 \
-  --print-every 1
+python3 runtime_bridge/apps/fixed_action_player.py dig
 ```
 
 倾倒动作：
 
 ```bash
-python3 runtime_bridge/apps/fixed_action_player.py \
-  --action dump \
-  --state-bind-host 0.0.0.0 \
-  --state-port 18081 \
-  --orin-host 192.168.2.88 \
-  --action-port 18082 \
-  --print-every 1
+python3 runtime_bridge/apps/fixed_action_player.py dump
 ```
 
-上述固定动作命令默认只计算和打印，不发送 UDP 动作。完成单轴方向、限位、急停和现场安全检查后，必须显式增加 `--enable-motion` 才会向 Orin 发送动作。
-
-默认安全门同样开启；即使已显式启用动作，如果 Orin 仍发送 `control_enabled=false`，脚本也只会发送零动作。台架确认 Orin 不会误执行时，才使用：
-
-```bash
---send-when-control-disabled
-```
+固定动作增益、阈值、超时和网络设置同样读取 `runtime_bridge/config/runtime.json`。配置 schema 已升级为 `runtime_bridge_config_v2`，自定义配置必须包含 `fixed_action` section，旧 v1 配置会明确拒绝而不会静默补默认值。上述命令默认只计算和打印，不发送 UDP 动作；完成单轴方向、限位、急停和现场安全检查后，必须显式增加 `--enable-motion` 才会向 Orin 发送动作。`control_enabled=false` 时始终只生成零动作，不提供绕过参数。
 
 首次使用前需要当前 Python 环境安装 ONNX Runtime：
 
