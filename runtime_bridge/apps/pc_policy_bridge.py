@@ -13,7 +13,6 @@ from typing import Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-RL_PRJ_ROOT = PROJECT_ROOT.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from runtime_bridge.fixed_actions import physical_velocity_action_from_normalized
@@ -35,52 +34,19 @@ from runtime_bridge.protocol import (
     make_zero_action,
     now_ms,
 )
-
-
-DEFAULT_MACHINE_PROFILE = RL_PRJ_ROOT / "shared" / "machine_profile.json"
-DEFAULT_WAYPOINT_SLICE = PROJECT_ROOT / "localmap" / "exports" / "live_latest" / "observation_waypoint_slice.simple_rrt.json"
-DEFAULT_LATEST_OBS = PROJECT_ROOT / "runtime_bridge" / "exports" / "latest_observation.json"
-DEFAULT_ONNX = (
-    RL_PRJ_ROOT
-    / "RLExcavator"
-    / "Assets"
-    / "AIModels"
-    / "ExcavatorTrajectory-7496592.onnx"
-)
+from runtime_bridge.runtime_config import DEFAULT_RUNTIME_CONFIG, load_runtime_config
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """构造 policy bridge 参数。"""
     parser = argparse.ArgumentParser(description="加载ONNX策略，接收Orin状态并回传4维动作。")
-    parser.add_argument("--onnx", type=Path, default=DEFAULT_ONNX, help="ML-Agents导出的ONNX模型路径")
-    parser.add_argument("--machine-profile", type=Path, default=DEFAULT_MACHINE_PROFILE, help="shared/machine_profile.json")
-    parser.add_argument("--waypoint-slice", type=Path, default=DEFAULT_WAYPOINT_SLICE, help="idx 15..26 waypoint切片JSON")
+    parser.add_argument("--config", type=Path, default=DEFAULT_RUNTIME_CONFIG, help="运行配置JSON")
     parser.add_argument("--task-mode", default="MoveToDig", choices=("MoveToDig", "CarryMaterial"), help="任务模式")
-    parser.add_argument("--state-bind-host", default="0.0.0.0", help="监听Orin状态的本地地址")
-    parser.add_argument("--state-port", type=int, default=18081, help="Orin -> PC 状态UDP端口")
-    parser.add_argument("--orin-host", default="192.168.2.88", help="动作包发送到的Orin地址")
-    parser.add_argument("--action-port", type=int, default=18082, help="PC -> Orin 动作UDP端口")
-    parser.add_argument("--action-valid-ms", type=int, default=100, help="动作有效期，Orin侧应做超时保护")
-    parser.add_argument("--print-every", type=int, default=1, help="每多少帧打印一次状态和动作")
-    parser.add_argument("--write-every", type=int, default=5, help="每多少帧写一次latest_observation.json")
-    parser.add_argument("--latest-observation-json", type=Path, default=DEFAULT_LATEST_OBS, help="最近一次38维observation调试输出")
     parser.add_argument(
         "--enable-motion",
         action="store_true",
         help="显式允许向Orin发送UDP动作；默认只推理和打印",
     )
-    parser.add_argument(
-        "--action-time-source",
-        choices=("orin", "pc"),
-        default="orin",
-        help="action.stamp_ms时间源；默认使用Orin时间域，避免PC/Orin时钟偏差导致动作被拒",
-    )
-    parser.add_argument(
-        "--send-policy-when-control-disabled",
-        action="store_true",
-        help="忽略control_enabled安全门，仍发送ONNX动作；只建议台架确认Orin不会执行时使用",
-    )
-    parser.add_argument("--bucket-tip-timeout-ms", type=int, default=500, help="bucket tip观测超时时间")
     return parser
 
 
@@ -148,7 +114,7 @@ class RuntimeRosIo:
         self.rclpy.shutdown()
 
 
-def should_send_policy(state: MachineStatePacket, allow_disabled: bool) -> tuple[bool, str]:
+def should_send_policy(state: MachineStatePacket) -> tuple[bool, str]:
     """检查安全门；不满足时仍可推理，但实际发送零动作。"""
     safety = state.safety
     if safety["estop"]:
@@ -157,7 +123,7 @@ def should_send_policy(state: MachineStatePacket, allow_disabled: bool) -> tuple
         return False, "stm32_not_alive"
     if not safety["sensor_valid"]:
         return False, "sensor_invalid"
-    if not safety["control_enabled"] and not allow_disabled:
+    if not safety["control_enabled"]:
         return False, "control_disabled"
     if safety["fault_flags"]:
         return False, "fault_flags"
@@ -206,28 +172,29 @@ def write_latest_observation(path: Path, observation: list[float], action: list[
 def main() -> int:
     """主循环：状态包到来时完成 observation -> ONNX -> action。"""
     args = build_arg_parser().parse_args()
-    machine_profile = load_machine_profile(args.machine_profile)
-    observation_builder = ObservationBuilder(machine_profile, task_mode=args.task_mode)
     try:
-        policy = OnnxPolicy(args.onnx)
-    except OnnxPolicyLoadError as exc:
-        print(f"ONNX policy error: {exc}", file=sys.stderr, flush=True)
+        config = load_runtime_config(args.config)
+        machine_profile = load_machine_profile(config.artifacts.machine_profile)
+        observation_builder = ObservationBuilder(machine_profile, task_mode=args.task_mode)
+        policy = OnnxPolicy(config.artifacts.onnx)
+    except (OSError, ValueError, OnnxPolicyLoadError) as exc:
+        print(f"policy bridge configuration error: {exc}", file=sys.stderr, flush=True)
         return 2
 
     ros_io = RuntimeRosIo()
 
     recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    recv_sock.bind((args.state_bind_host, args.state_port))
+    recv_sock.bind(config.network.state_endpoint)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    action_destination = (args.orin_host, args.action_port)
+    action_destination = config.network.action_endpoint
     previous_policy_action = [0.0, 0.0, 0.0, 0.0]
     state_count = 0
     action_seq = 0
 
     print(
         "pc policy bridge started: "
-        f"state <- {args.state_bind_host}:{args.state_port}, action -> {action_destination}, "
-        f"onnx={args.onnx}, enable_motion={args.enable_motion}, task_mode={args.task_mode}",
+        f"state <- {config.network.state_endpoint}, action -> {action_destination}, "
+        f"onnx={config.artifacts.onnx}, enable_motion={args.enable_motion}, task_mode={args.task_mode}",
         flush=True,
     )
 
@@ -249,16 +216,16 @@ def main() -> int:
             ros_io.spin_once(timeout_sec=0.01)
             bucket_tip = ros_io.latest_bucket_tip
             if bucket_tip is None:
-                if args.print_every > 0 and state_count % args.print_every == 0:
+                if config.diagnostics.print_every > 0 and state_count % config.diagnostics.print_every == 0:
                     print("waiting for /bucket_tip_observation; is excavator_tf_node running?", flush=True)
                 continue
 
             age_ms = int(time.time() * 1000) - int(bucket_tip.stamp_ms or 0)
-            if age_ms > args.bucket_tip_timeout_ms:
+            if age_ms > config.policy.bucket_tip_timeout_ms:
                 print(f"skip stale bucket tip: age={age_ms}ms", flush=True)
                 continue
 
-            waypoint_values = load_waypoint_slice_values(args.waypoint_slice)
+            waypoint_values = load_waypoint_slice_values(config.artifacts.waypoint_slice)
             observation = observation_builder.build(
                 packet,
                 bucket_tip,
@@ -268,28 +235,32 @@ def main() -> int:
             )
             policy_action = policy.run(observation)
             actuator_velocity_action = denormalize_policy_action(policy_action, machine_profile)
-            send_policy, reason = should_send_policy(packet, args.send_policy_when_control_disabled)
+            send_policy, reason = should_send_policy(packet)
             action_stamp_ms = (
                 estimate_remote_now_ms(packet.stamp_ms, received_pc_ms)
-                if args.action_time_source == "orin"
+                if config.network.action_time_source == "orin"
                 else now_ms()
             )
             sent_packet = (
                 make_policy_action(
                     action_seq,
                     actuator_velocity_action,
-                    args.action_valid_ms,
+                    config.network.action_valid_ms,
                     "normalized_velocity_command",
                     stamp_ms=action_stamp_ms,
                 )
                 if send_policy
-                else make_zero_action(action_seq, valid_for_ms=args.action_valid_ms, stamp_ms=action_stamp_ms)
+                else make_zero_action(
+                    action_seq,
+                    valid_for_ms=config.network.action_valid_ms,
+                    stamp_ms=action_stamp_ms,
+                )
             )
             if not send_policy:
                 sent_packet = make_policy_action(
                     action_seq,
                     sent_packet.action,
-                    args.action_valid_ms,
+                    config.network.action_valid_ms,
                     "normalized_velocity_command",
                     stamp_ms=action_stamp_ms,
                 )
@@ -299,9 +270,14 @@ def main() -> int:
             previous_policy_action = list(policy_action) if send_policy else [0.0, 0.0, 0.0, 0.0]
             action_seq += 1
 
-            if args.write_every > 0 and state_count % args.write_every == 0:
-                write_latest_observation(args.latest_observation_json, observation, policy_action, sent_packet)
-            if args.print_every > 0 and state_count % args.print_every == 0:
+            if config.diagnostics.write_every > 0 and state_count % config.diagnostics.write_every == 0:
+                write_latest_observation(
+                    config.artifacts.latest_observation,
+                    observation,
+                    policy_action,
+                    sent_packet,
+                )
+            if config.diagnostics.print_every > 0 and state_count % config.diagnostics.print_every == 0:
                 print(
                     f"state[{state_count}] seq={packet.seq} obs[9:12]={observation[9:12]} "
                     f"pitch={observation[34]:.3f} policy={policy_action} sent={sent_packet.action} "

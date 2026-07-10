@@ -34,7 +34,7 @@ docs/                    # 雷达接线、端口、防火墙等运行笔记
 ## 1. 准备环境
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 source /opt/ros/jazzy/setup.zsh
 ```
 
@@ -316,21 +316,16 @@ python3 runtime_bridge/apps/pc_runtime_bridge.py \
 启动 ONNX policy bridge：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 source /opt/ros/jazzy/setup.zsh
 source ros2_ws/install/setup.zsh
 
-.venv_runtime/bin/python runtime_bridge/apps/pc_policy_bridge.py \
-  --onnx /home/zhaoshuai/workspace_uinty/RL_prj/RLExcavator/Assets/AIModels/ExcavatorTrajectory-7496592.onnx \
-  --state-bind-host 0.0.0.0 \
-  --state-port 18081 \
-  --orin-host 192.168.2.88 \
-  --action-port 18082 \
-  --print-every 1 \
-  --write-every 5
+.venv_runtime/bin/python runtime_bridge/apps/pc_policy_bridge.py
 ```
 
-它会接收 Orin `machine_state_v1`，发布 `/joint_states` 给 FK，读取 `/bucket_tip_observation`，组装 38 维 observation 并运行 ONNX。默认不会发送 UDP 动作；完成离线检查和现场安全确认后，必须显式增加 `--enable-motion` 才会向 Orin 发送 `policy_action`。
+网络、模型、机型 profile、waypoint 产物、超时和日志采样统一读取 `runtime_bridge/config/runtime.json`，现场启动不再重复输入。任务切换使用 `--task-mode CarryMaterial`；使用其他部署配置时只需增加 `--config <path>`。
+
+它会接收 Orin `machine_state_v1`，发布 `/joint_states` 给 FK，读取 `/bucket_tip_observation`，组装 38 维 observation 并运行 ONNX。默认不会发送 UDP 动作；完成离线检查和现场安全确认后，必须显式增加 `--enable-motion` 才会向 Orin 发送 `policy_action`。程序不再提供忽略 `control_enabled` 的策略发送参数。
 ONNX 输出在 PC 内部仍按训练语义视为 `[-1, 1]` 策略动作；发给 Orin 前会按 `shared/machine_profile.json` 反归一化为物理速度，但 UDP 包里的 `action_type` 仍保持 `normalized_velocity_command` 以兼容 Orin 端解析。其中 `boom/stick/bucket` 单位 m/s，`swing` 单位 rad/s。
 默认安全门开启：如果 `estop=true`、`sensor_valid=false`、`stm32_alive=false`、`control_enabled=false` 或存在 `fault_flags`，仍会计算 ONNX 输出，但实际发给 Orin 的动作是零动作。
 

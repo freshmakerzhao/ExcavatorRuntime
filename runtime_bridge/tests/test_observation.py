@@ -58,8 +58,10 @@ def sample_state(control_enabled=False):
 class ObservationBuilderTest(unittest.TestCase):
     def test_policy_bridge_requires_explicit_motion_enable(self):
         parser = build_arg_parser()
+        defaults = parser.parse_args([])
 
-        self.assertFalse(parser.parse_args([]).enable_motion)
+        self.assertEqual(set(vars(defaults)), {"config", "task_mode", "enable_motion"})
+        self.assertFalse(defaults.enable_motion)
         self.assertTrue(parser.parse_args(["--enable-motion"]).enable_motion)
 
     def test_builds_locked_38d_observation_indices(self):
@@ -111,7 +113,7 @@ class ObservationBuilderTest(unittest.TestCase):
         self.assertAlmostEqual(obs[37], 1.0)
 
     def test_action_packet_round_trips_and_safety_gate_defaults_to_zero_when_disabled(self):
-        send_policy, reason = should_send_policy(sample_state(control_enabled=False), allow_disabled=False)
+        send_policy, reason = should_send_policy(sample_state(control_enabled=False))
         self.assertFalse(send_policy)
         self.assertEqual(reason, "control_disabled")
 
