@@ -6,6 +6,7 @@ ros2_ws/log/
 # Large captured lidar data
 bags/
 localmap/exports/
+runtime_bridge/exports/
 knowledge/
 rslidar_sdk.zip
 *.bag
@@ -24,6 +25,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.venv_runtime/
 
 # Native build artifacts
 build/
@@ -45,3 +47,4 @@ log/
 tmp/
 *.tmp
 *.log
+EvaluationReport

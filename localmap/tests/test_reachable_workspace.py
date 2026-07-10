@@ -85,6 +85,23 @@ class ReachableWorkspaceTest(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.reason, "goal_out_of_reachable_workspace")
 
+    def test_mock_dig_targets_stay_inside_move_to_dig_workspace(self):
+        project_root = Path(__file__).resolve().parents[3]
+        workspace = load_reachable_workspace(
+            project_root / "shared" / "reachable_workspaces" / "scale_excavator_workspace.json",
+            mode="MoveToDig",
+        )
+        targets = json.loads(
+            (project_root / "AiryLidar" / "localmap" / "config" / "targets.mock.json").read_text(encoding="utf-8")
+        )
+
+        dig_targets = {target["id"]: np.asarray(target["position_m"], dtype=np.float64) for target in targets["dig_targets"]}
+
+        self.assertTrue(workspace.contains(dig_targets["mock_dig_001"]), dig_targets["mock_dig_001"].tolist())
+        self.assertTrue(workspace.contains(dig_targets["mock_dig_left_far"]), dig_targets["mock_dig_left_far"].tolist())
+        self.assertGreater(dig_targets["mock_dig_001"][0], 0.7)
+        self.assertLess(dig_targets["mock_dig_left_far"][0], -0.7)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,123 @@
+import math
+import unittest
+
+from runtime_bridge.observation import BucketTipObservation, ObservationBuilder, normalize_position
+from runtime_bridge.protocol import MachineStatePacket, decode_packet, encode_packet
+from runtime_bridge.apps.pc_policy_bridge import denormalize_policy_action, make_policy_action, should_send_policy
+
+
+def sample_profile():
+    return {
+        "actuators": {
+            "boom": {"range": [-0.1, 0.1], "sign": 1, "max_speed_positive": 0.04, "max_speed_negative": 0.02},
+            "stick": {"range": [-0.2, 0.2], "sign": 1, "max_speed_positive": 0.05, "max_speed_negative": 0.05},
+            "bucket": {"range": [-0.3, 0.1], "sign": 1, "max_speed_positive": 0.03, "max_speed_negative": 0.06},
+            "swing": {"range": [None, None], "sign": 1, "max_speed_positive": 0.6, "max_speed_negative": 0.6},
+        },
+        "observation_schema": {
+            "total_dim": 38,
+            "normalizers": {
+                "position_normalizer": 1.13,
+                "tip_velocity_scale": 0.05,
+                "distance_normalizer": 1.13,
+                "tube_radius": 0.04,
+                "target_threshold": 0.03,
+                "pitch_norm_deg": 180.0,
+            },
+        },
+        "task_profile": {"bucket_pitch_targets_deg": {"MoveToDig": 70.0, "CarryMaterial": 180.0}},
+    }
+
+
+def sample_state(control_enabled=False):
+    return MachineStatePacket(
+        seq=10,
+        stamp_ms=1000,
+        safety={
+            "estop": False,
+            "stm32_alive": True,
+            "sensor_valid": True,
+            "control_enabled": control_enabled,
+            "fault_flags": [],
+        },
+        actuator_state={
+            "boom": {"position_m": 0.0, "velocity_mps": 0.02},
+            "stick": {"position_m": -0.2, "velocity_mps": -0.025},
+            "bucket": {"position_m": 0.1, "velocity_mps": 0.03},
+            "swing": {"position_rad": math.pi / 2.0, "velocity_rad_s": 0.3},
+        },
+        joint_state={"position_rad": {"swing": 0.0, "boom": 0.0, "arm": 0.0, "bucket": 0.0}},
+    )
+
+
+class ObservationBuilderTest(unittest.TestCase):
+    def test_builds_locked_38d_observation_indices(self):
+        builder = ObservationBuilder(sample_profile(), task_mode="MoveToDig")
+        waypoint_values = [i / 100.0 for i in range(12)]
+
+        obs = builder.build(
+            sample_state(),
+            BucketTipObservation((0.113, -0.226, 0.565), math.radians(90.0), stamp_ms=1000),
+            waypoint_values,
+            previous_action=[0.1, -0.2, 0.3, -0.4],
+        )
+
+        self.assertEqual(len(obs), 38)
+        self.assertAlmostEqual(obs[0], 0.0)
+        self.assertAlmostEqual(obs[1], 0.5)
+        self.assertAlmostEqual(obs[2], -1.0)
+        self.assertAlmostEqual(obs[6], 1.0)
+        self.assertAlmostEqual(obs[7], 0.0, places=6)
+        self.assertAlmostEqual(obs[8], 0.5)
+        self.assertEqual(obs[15:27], waypoint_values)
+        self.assertEqual(obs[27:29], [1.0, 0.0])
+        self.assertEqual(obs[30:34], [0.1, -0.2, 0.3, -0.4])
+        self.assertAlmostEqual(obs[9], 0.113 / 1.13)
+        self.assertAlmostEqual(obs[10], -0.226 / 1.13)
+        self.assertAlmostEqual(obs[11], 0.565 / 1.13)
+        self.assertAlmostEqual(obs[34], 90.0 / 180.0)
+        self.assertAlmostEqual(obs[35], 70.0 / 180.0)
+        self.assertAlmostEqual(obs[36], 20.0 / 180.0)
+
+    def test_second_frame_estimates_tip_and_pitch_velocity(self):
+        builder = ObservationBuilder(sample_profile(), task_mode="MoveToDig")
+        zeros = [0.0] * 12
+
+        builder.build(
+            sample_state(),
+            BucketTipObservation((0.0, 0.0, 0.0), 0.0, stamp_ms=1000),
+            zeros,
+            previous_action=[0.0, 0.0, 0.0, 0.0],
+        )
+        obs = builder.build(
+            sample_state(),
+            BucketTipObservation((0.005, 0.0, 0.0), math.radians(18.0), stamp_ms=1100),
+            zeros,
+            previous_action=[0.0, 0.0, 0.0, 0.0],
+        )
+
+        self.assertAlmostEqual(obs[12], 1.0)
+        self.assertAlmostEqual(obs[37], 1.0)
+
+    def test_action_packet_round_trips_and_safety_gate_defaults_to_zero_when_disabled(self):
+        send_policy, reason = should_send_policy(sample_state(control_enabled=False), allow_disabled=False)
+        self.assertFalse(send_policy)
+        self.assertEqual(reason, "control_disabled")
+
+        packet = make_policy_action(3, [2.0, -2.0, 0.25, 0.0], 100, "normalized_velocity_command")
+        decoded = decode_packet(encode_packet(packet))
+
+        self.assertEqual(decoded.action, [2.0, -2.0, 0.25, 0.0])
+        self.assertEqual(decoded.action_type, "normalized_velocity_command")
+
+    def test_denormalizes_policy_action_to_physical_velocity_command(self):
+        action = denormalize_policy_action([1.0, -1.0, 0.5, -0.5], sample_profile())
+
+        self.assertEqual(action, [0.04, -0.05, 0.015, -0.3])
+
+    def test_normalize_position_respects_profile_sign(self):
+        self.assertEqual(normalize_position(1.0, {"range": [0.0, 2.0], "sign": -1}), -0.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

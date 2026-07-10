@@ -22,6 +22,7 @@ setup(
     entry_points={
         "console_scripts": [
             "excavator_tf_node = excavator_kinematics.excavator_tf_node:main",
+            "joint_slider_publisher = excavator_kinematics.joint_slider_publisher:main",
         ],
     },
 )

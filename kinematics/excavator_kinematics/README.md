@@ -75,7 +75,9 @@ Bucket tip pose:
 
 ```text
 /bucket_tip_pose_base  # geometry_msgs/msg/PoseStamped, frame_id=base_link
-/bucket_tip_pose_map   # geometry_msgs/msg/PoseStamped, frame_id=map
+/bucket_tip_pose_map   # geometry_msgs/msg/PoseStamped, frame_id=fk_root
+/bucket_tip_pose_unity # geometry_msgs/msg/PoseStamped, frame_id=machine_root
+/bucket_tip_observation # std_msgs/msg/Float32MultiArray: [x, y, z, pitch_rad]
 ```
 
 ## Configure Geometry
@@ -105,6 +107,22 @@ angle_offsets:
   boom: 0.0
   arm: 0.0
   bucket: 0.0
+```
+
+Use `joint_signs` to align sensor positive direction with FK positive direction:
+
+```yaml
+joint_signs:
+  swing: -1.0
+  boom: -1.0
+  arm: -1.0
+  bucket: 1.0
+```
+
+The FK angle is:
+
+```text
+fk_angle = input_angle * joint_sign + angle_offset
 ```
 
 ## Build
@@ -141,6 +159,9 @@ Check bucket tip position:
 
 ```bash
 ros2 topic echo /bucket_tip_pose_base
+ros2 topic echo /bucket_tip_pose_map
+ros2 topic echo /bucket_tip_pose_unity
+ros2 topic echo /bucket_tip_observation
 ```
 
 ## Minimal JointState Test
@@ -153,6 +174,14 @@ ros2 topic pub /joint_states sensor_msgs/msg/JointState "{
   name: ['swing_joint', 'boom_joint', 'arm_joint', 'bucket_joint'],
   position: [0.0, 0.3, -0.8, 0.5]
 }" -r 10
+```
+
+Or use the GUI joint sliders:
+
+```bash
+ros2 run excavator_kinematics joint_slider_publisher \
+  --publish-on-change \
+  --initial 0.0 0.0 0.0 0.0
 ```
 
 Then inspect:

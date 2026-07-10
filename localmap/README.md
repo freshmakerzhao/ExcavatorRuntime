@@ -20,6 +20,7 @@
 - `apps/planning/`：规划入口，包括 RRT 请求生成、bucket-tip 简单 RRT、轨迹命令和 observation waypoint 切片。
 - `apps/visualization/`：RViz 可视化入口，包括可达区域 marker 和规划轨迹 marker。
 - `apps/data_tools/`：离线/数据工具，包括 bag/npz 导出、离线 pipeline 和 OctoMap 快照保存。
+- `apps/diagnostics/`：诊断入口，包括当前 ROS topic 和 JSON 产物的 smoke check。
 - `scripts/`：兼容入口层，保留旧命令路径；实际实现转发到 `apps/*`。
 - `localmap_core/`：感知、规划和可视化共享的核心模块，不直接依赖 ROS 节点生命周期。
 
@@ -30,11 +31,12 @@
 - `scripts/export_live_cloud.py`：兼容入口，从在线 `/rslidar_points` 抓一帧并导出为同样格式的 NPZ/CSV
 - `scripts/generate_local_map_from_npz.py`：兼容入口，把离线 NPZ 点云、外参和 target 配置合成第一版 `LocalMap`
 - `scripts/generate_rrt_request_from_local_map.py`：兼容入口，把 `LocalMap`、bucket tip 和 `machine_profile.json` 组织成 RRT* 请求
-- `scripts/bridge_bucket_tip_from_tf.py`：兼容入口，把运动学包输出的 `/bucket_tip_pose_base` 转成 `machine_root` bucket tip JSON
+- `scripts/bridge_bucket_tip_from_tf.py`：兼容入口，把原 TF 项目输出的 `/bucket_tip_pose_map` 转成 `machine_root` bucket tip JSON
 - `scripts/generate_simple_rrt_trajectory_from_request.py`：兼容入口，从 RRT* 请求生成第一版 bucket-tip 简单避障轨迹，默认受 `shared/reachable_workspaces/scale_excavator_workspace.json` 约束
 - `scripts/generate_observation_waypoint_slice.py`：兼容入口，生成 38 维 observation 中 `idx 15..26` 的 waypoint 相关切片
 - `scripts/run_perception_stack.sh`：兼容入口，一键启动雷达驱动、实时坐标转换、实时LocalMap、OctoMap和可达区域marker，可选轨迹marker
 - `scripts/run_planning_once.sh`：兼容入口，从当前 OctoMap 一次性生成 LocalMap、RRT请求、轨迹和observation切片
+- `scripts/run_smoke_check.sh`：兼容入口，一键检查当前感知/建图/规划链路是否健康
 - `config/extrinsics_rslidar_to_machine_root.measured.json`：当前实测 `rslidar -> machine_root` 外参
 - `config/targets.mock.json`：占位 dig/dump target，后续由任务配置或感知模块生成
 - `config/bucket_tip.machine_root.measured.json`：占位 bucket tip，真机运行时由状态估计/FK提供
@@ -47,7 +49,7 @@
 
 ## 推荐运行方式
 
-ROS2 Jazzy 的 Python 扩展依赖系统 Python 3.12。当前机器如果 shell 在 conda 环境中，建议显式使用 `/usr/bin/python3`。
+ROS2 Jazzy 的 Python 扩展依赖 Python 3.12。当前机器如果 shell 在 conda 环境中，需确保 `python3` 指向可导入 ROS2 `rclpy` 的环境。
 
 ## 运动学 TF 接入
 
@@ -76,27 +78,33 @@ source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/s
 ros2 launch excavator_kinematics excavator_tf.launch.py
 ```
 
-TF 包输出的 `/bucket_tip_pose_base` 使用 ROS 坐标约定：
+原 TF 项目输出 `/bucket_tip_pose_map`，其坐标约定是 ROS/FK 风格。当前我们把 FK 内部根坐标命名为 `fk_root`，它与 `machine_root` 原点重合，但轴向不同：
 
 ```text
-X forward, Y left, Z up
+fk_root:
+X forward
+Y left
+Z up
 ```
 
-规划链路使用 Unity/MachineRoot 约定：
+规划链路使用 `machine_root`：
 
 ```text
-X right, Y up, Z forward
+machine_root:
+X right
+Y up
+Z forward
 ```
 
-桥接节点把 bucket tip 位置转换到 `machine_root` 并持续写出 JSON：
+因此需要 bridge 节点把 bucket tip 位置转换到 `machine_root` 并持续写出 JSON：
 
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
-/usr/bin/python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
-  --input-topic /bucket_tip_pose_base \
+python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
+  --input-topic /bucket_tip_pose_map \
   --output-topic /localmap/bucket_tip_machine_root_pose \
   --bridge localmap/config/bucket_tip_tf_bridge.machine_root.json \
   --output-json localmap/exports/live_latest/bucket_tip.machine_root.live.json
@@ -114,17 +122,27 @@ localmap/exports/live_latest/bucket_tip.machine_root.live.json
 localmap/config/bucket_tip.machine_root.measured.json
 ```
 
-一键感知栈默认不启动 bucket tip bridge；如果 TF 节点已经在运行，可以打开：
+一键感知栈默认不启动 bucket tip bridge；如果 FK 节点已经在运行，可以打开：
 
 ```bash
 RUN_BUCKET_TIP_BRIDGE=1 localmap/scripts/run_perception_stack.sh
 ```
 
+检查：
+
+```bash
+ros2 topic echo /bucket_tip_pose_map --once
+ros2 topic echo /localmap/bucket_tip_machine_root_pose --once
+python3 -m json.tool localmap/exports/live_latest/bucket_tip.machine_root.live.json
+```
+
+## 离线 bag 检查
+
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj
 source /opt/ros/jazzy/setup.zsh
 
-/usr/bin/python3 ExcavatorRuntime/localmap/scripts/inspect_bag_points.py \
+python3 ExcavatorRuntime/localmap/scripts/inspect_bag_points.py \
   ExcavatorRuntime/bags/airy_20260706_202359 \
   --frames 3
 ```
@@ -135,7 +153,7 @@ source /opt/ros/jazzy/setup.zsh
 cd /home/zhaoshuai/workspace_uinty/RL_prj
 source /opt/ros/jazzy/setup.zsh
 
-/usr/bin/python3 ExcavatorRuntime/localmap/scripts/export_first_cloud.py \
+python3 ExcavatorRuntime/localmap/scripts/export_first_cloud.py \
   ExcavatorRuntime/bags/airy_20260706_202359 \
   --max-csv-points 2000
 ```
@@ -152,7 +170,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
-/usr/bin/python3 localmap/scripts/export_live_cloud.py \
+python3 localmap/scripts/export_live_cloud.py \
   --output-dir localmap/exports/live_latest \
   --timeout-s 5
 ```
@@ -171,7 +189,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
-/usr/bin/python3 localmap/scripts/transform_live_cloud_to_base.py \
+python3 localmap/scripts/transform_live_cloud_to_base.py \
   --input-topic /rslidar_points \
   --output-topic /localmap/machine_root_points \
   --extrinsics localmap/config/extrinsics_rslidar_to_machine_root.measured.json
@@ -211,7 +229,7 @@ ros2 topic echo /localmap/machine_root_points --once --field header
 数值检查转换是否成功：
 
 ```bash
-/usr/bin/python3 localmap/scripts/inspect_live_cloud_geometry.py \
+python3 localmap/scripts/inspect_live_cloud_geometry.py \
   --topic /localmap/machine_root_points \
   --expected-frame machine_root \
   --up-axis y \
@@ -232,7 +250,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
-/usr/bin/python3 localmap/scripts/publish_reachable_workspace_markers.py \
+python3 localmap/scripts/publish_reachable_workspace_markers.py \
   --workspace /home/zhaoshuai/workspace_uinty/RL_prj/shared/reachable_workspaces/scale_excavator_workspace.json \
   --mode MoveToDig
 ```
@@ -246,7 +264,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime/ros2_ws/install/setup.zsh
 
-/usr/bin/python3 localmap/scripts/run_live_local_map_node.py \
+python3 localmap/scripts/run_live_local_map_node.py \
   --input-topic /localmap/machine_root_points \
   --output-json localmap/exports/live_latest/local_map.live.json \
   --targets localmap/config/targets.mock.json \
@@ -276,7 +294,7 @@ ros2 topic echo /localmap/local_map_json --once
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
-/usr/bin/python3 localmap/scripts/generate_local_map_from_npz.py
+python3 localmap/scripts/generate_local_map_from_npz.py
 ```
 
 如果要临时裁剪 base frame 点云，可以传入：
@@ -284,7 +302,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
-/usr/bin/python3 localmap/scripts/generate_local_map_from_npz.py \
+python3 localmap/scripts/generate_local_map_from_npz.py \
   --bounds -2.0 4.0 -3.0 3.0 -0.2 2.0
 ```
 
@@ -297,7 +315,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
-/usr/bin/python3 localmap/scripts/inspect_extrinsics.py \
+python3 localmap/scripts/inspect_extrinsics.py \
   --extrinsics localmap/config/extrinsics_rslidar_to_machine_root.measured.json
 ```
 
@@ -306,7 +324,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
-/usr/bin/python3 localmap/scripts/generate_local_map_from_npz.py \
+python3 localmap/scripts/generate_local_map_from_npz.py \
   --npz localmap/exports/airy_20260707_095607/rslidar_points_first_frame.npz \
   --extrinsics localmap/config/extrinsics_rslidar_to_machine_root.measured.json \
   --bag-path bags/airy_20260707_095607 \
@@ -324,7 +342,7 @@ machine_root
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
-/usr/bin/python3 localmap/scripts/generate_rrt_request_from_local_map.py
+python3 localmap/scripts/generate_rrt_request_from_local_map.py
 ```
 
 输出：
@@ -336,7 +354,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
-/usr/bin/python3 localmap/scripts/generate_mock_trajectory_from_rrt_request.py
+python3 localmap/scripts/generate_mock_trajectory_from_rrt_request.py
 ```
 
 输出：
@@ -350,7 +368,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
-/usr/bin/python3 localmap/scripts/generate_observation_waypoint_slice.py
+python3 localmap/scripts/generate_observation_waypoint_slice.py
 ```
 
 输出：
@@ -377,7 +395,7 @@ source /opt/ros/jazzy/setup.zsh
 export BAG_DIR=bags/airy_repositioned_20260707_152018
 export EXPORT_DIR=localmap/exports/$(basename "$BAG_DIR")
 
-/usr/bin/python3 localmap/scripts/run_offline_localmap_pipeline.py \
+python3 localmap/scripts/run_offline_localmap_pipeline.py \
   --bag "$BAG_DIR" \
   --output-dir "$EXPORT_DIR" \
   --extrinsics localmap/config/extrinsics_rslidar_to_machine_root.measured.json \
@@ -387,7 +405,7 @@ export EXPORT_DIR=localmap/exports/$(basename "$BAG_DIR")
 如果已经导出过第一帧 NPZ，只想复用现有点云并重跑 LocalMap/RRT/Observation：
 
 ```bash
-/usr/bin/python3 localmap/scripts/run_offline_localmap_pipeline.py \
+python3 localmap/scripts/run_offline_localmap_pipeline.py \
   --bag "$BAG_DIR" \
   --output-dir "$EXPORT_DIR" \
   --extrinsics localmap/config/extrinsics_rslidar_to_machine_root.measured.json \
@@ -398,7 +416,7 @@ export EXPORT_DIR=localmap/exports/$(basename "$BAG_DIR")
 检查将要执行的命令但不写产物：
 
 ```bash
-/usr/bin/python3 localmap/scripts/run_offline_localmap_pipeline.py \
+python3 localmap/scripts/run_offline_localmap_pipeline.py \
   --bag "$BAG_DIR" \
   --output-dir "$EXPORT_DIR" \
   --extrinsics localmap/config/extrinsics_rslidar_to_machine_root.measured.json \
@@ -411,7 +429,7 @@ export EXPORT_DIR=localmap/exports/$(basename "$BAG_DIR")
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 
-/usr/bin/python3 -m unittest discover -s localmap/tests -p 'test_*.py'
+python3 -m unittest discover -s localmap/tests -p 'test_*.py'
 ```
 
 ## 已验证的离线 bag 摘要

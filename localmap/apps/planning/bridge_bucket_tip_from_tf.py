@@ -33,10 +33,10 @@ DEFAULT_OUTPUT_JSON = LOCALMAP_DIR / "exports" / "live_latest" / "bucket_tip.mac
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """构造命令行参数，默认对接excavator_kinematics包的输出。"""
-    parser = argparse.ArgumentParser(description="把/bucket_tip_pose_base转换为machine_root bucket tip状态。")
-    parser.add_argument("--input-topic", default="/bucket_tip_pose_base", help="TF/FK输出的PoseStamped topic")
+    parser = argparse.ArgumentParser(description="把/bucket_tip_pose_map转换为machine_root bucket tip状态。")
+    parser.add_argument("--input-topic", default="/bucket_tip_pose_map", help="TF/FK输出的PoseStamped topic")
     parser.add_argument("--output-topic", default="/localmap/bucket_tip_machine_root_pose", help="转换后的PoseStamped topic")
-    parser.add_argument("--bridge", type=Path, default=DEFAULT_BRIDGE, help="base_link到machine_root的bucket tip桥接配置")
+    parser.add_argument("--bridge", type=Path, default=DEFAULT_BRIDGE, help="fk_root到machine_root的bucket tip桥接配置")
     parser.add_argument("--output-json", type=Path, default=DEFAULT_OUTPUT_JSON, help="写给规划脚本读取的bucket tip JSON")
     parser.add_argument("--write-every", type=int, default=5, help="每收到多少帧写一次JSON；1表示每帧都写")
     parser.add_argument("--log-every", type=int, default=30, help="每处理多少帧打印一次统计；0表示关闭")
@@ -49,7 +49,7 @@ def stamp_to_seconds(stamp: object) -> float:
 
 
 class BucketTipBridgeNode(Node):
-    """ROS2节点：订阅base_link bucket tip，发布machine_root bucket tip并写JSON。"""
+    """ROS2节点：订阅FK内部bucket tip，发布machine_root bucket tip并写JSON。"""
 
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__("airy_bucket_tip_tf_bridge")

@@ -28,7 +28,10 @@ if [[ -z "${BUCKET_TIP_JSON:-}" ]]; then
   fi
 fi
 REACHABLE_WORKSPACE_JSON="${REACHABLE_WORKSPACE_JSON:-${AIRY_ROOT}/../shared/reachable_workspaces/scale_excavator_workspace.json}"
-WORKSPACE_MODE="${WORKSPACE_MODE:-MoveToDig}"
+TASK_MODE="${TASK_MODE:-MoveToDig}"
+TARGET_KIND="${TARGET_KIND:-dig}"
+TARGET_ID="${TARGET_ID:-mock_dig_001}"
+WORKSPACE_MODE="${WORKSPACE_MODE:-${TASK_MODE}}"
 USE_REACHABLE_WORKSPACE="${USE_REACHABLE_WORKSPACE:-1}"
 
 PLANNING_BOUNDS="${PLANNING_BOUNDS:--1.5 3.0 -0.7 1.0 -0.5 4.0}"
@@ -81,9 +84,13 @@ echo "1/4 导出OctoMap obstacles -> LocalMap"
 
 echo "2/4 生成RRT请求"
 echo "    bucket tip: ${BUCKET_TIP_JSON}"
+echo "    target: ${TARGET_KIND}:${TARGET_ID}, task_mode=${TASK_MODE}"
 /usr/bin/python3 "${AIRY_ROOT}/localmap/scripts/generate_rrt_request_from_local_map.py" \
   --local-map "${LOCAL_MAP_JSON}" \
   --bucket-tip "${BUCKET_TIP_JSON}" \
+  --target-kind "${TARGET_KIND}" \
+  --target-id "${TARGET_ID}" \
+  --task-mode "${TASK_MODE}" \
   --output "${RRT_REQUEST_JSON}"
 
 echo "3/4 生成bucket-tip简单避障轨迹"

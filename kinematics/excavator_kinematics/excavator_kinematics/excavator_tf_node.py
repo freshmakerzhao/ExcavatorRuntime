@@ -5,6 +5,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, TransformStamped
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32MultiArray
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 
@@ -18,6 +19,7 @@ class ExcavatorTfNode(Node):
 
         self.frames = {
             "map": self.declare_parameter("frames.map", "map").value,
+            "unity": self.declare_parameter("frames.unity", "machine_root").value,
             "base": self.declare_parameter("frames.base", "base_link").value,
             "swing": self.declare_parameter("frames.swing", "swing_link").value,
             "boom": self.declare_parameter("frames.boom", "boom_link").value,
@@ -48,6 +50,12 @@ class ExcavatorTfNode(Node):
             "arm": float(self.declare_parameter("angle_offsets.arm", 0.0).value),
             "bucket": float(self.declare_parameter("angle_offsets.bucket", 0.0).value),
         }
+        self.joint_signs = {
+            "swing": float(self.declare_parameter("joint_signs.swing", 1.0).value),
+            "boom": float(self.declare_parameter("joint_signs.boom", 1.0).value),
+            "arm": float(self.declare_parameter("joint_signs.arm", 1.0).value),
+            "bucket": float(self.declare_parameter("joint_signs.bucket", 1.0).value),
+        }
 
         self.publish_map_to_base = bool(
             self.declare_parameter("publish_map_to_base", True).value
@@ -65,6 +73,8 @@ class ExcavatorTfNode(Node):
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
         self.tip_base_pub = self.create_publisher(PoseStamped, "bucket_tip_pose_base", 10)
         self.tip_map_pub = self.create_publisher(PoseStamped, "bucket_tip_pose_map", 10)
+        self.tip_unity_pub = self.create_publisher(PoseStamped, "bucket_tip_pose_unity", 10)
+        self.tip_observation_pub = self.create_publisher(Float32MultiArray, "bucket_tip_observation", 10)
 
         self.create_subscription(JointState, "joint_states", self.on_joint_state, 20)
 
@@ -153,10 +163,19 @@ class ExcavatorTfNode(Node):
 
         self.tip_base_pub.publish(pose_from_matrix(now, self.frames["base"], t_base_tip))
         self.tip_map_pub.publish(pose_from_matrix(now, self.frames["map"], t_map_tip))
+        # 关键：额外发布Unity/MachineRoot左手坐标下的位置，供真机runtime和RViz直接查看。
+        unity_position = fk_root_position_to_unity(matrix_translation(t_map_tip))
+        pitch_rad = bucket_tip_pitch_rad_from_matrix(t_map_tip)
+        self.tip_unity_pub.publish(pose_from_position(now, self.frames["unity"], unity_position))
+        self.tip_observation_pub.publish(bucket_tip_observation_message(unity_position, pitch_rad))
 
     def _joint(self, key: str) -> float:
         name = self.joint_names[key]
-        return self.joint_positions.get(name, 0.0) + self.angle_offsets[key]
+        return apply_joint_sign_and_offset(
+            self.joint_positions.get(name, 0.0),
+            self.joint_signs[key],
+            self.angle_offsets[key],
+        )
 
     def forward_kinematics_base(
         self, swing: float, boom: float, arm: float, bucket: float
@@ -198,6 +217,62 @@ def pose_from_matrix(stamp, frame_id: str, matrix: Matrix4) -> PoseStamped:
     msg.pose.orientation.z = quat[2]
     msg.pose.orientation.w = quat[3]
     return msg
+
+
+def pose_from_position(stamp, frame_id: str, xyz: Vec3) -> PoseStamped:
+    """从位置构造PoseStamped；Unity左手系姿态暂不作为权威输出。"""
+    msg = PoseStamped()
+    msg.header.stamp = stamp
+    msg.header.frame_id = frame_id
+    msg.pose.position.x = float(xyz[0])
+    msg.pose.position.y = float(xyz[1])
+    msg.pose.position.z = float(xyz[2])
+    msg.pose.orientation.x = 0.0
+    msg.pose.orientation.y = 0.0
+    msg.pose.orientation.z = 0.0
+    msg.pose.orientation.w = 1.0
+    return msg
+
+
+def matrix_translation(matrix: Matrix4) -> Vec3:
+    """取齐次变换矩阵的平移列。"""
+    return float(matrix[0][3]), float(matrix[1][3]), float(matrix[2][3])
+
+
+def fk_root_position_to_unity(position: Vec3) -> Vec3:
+    """把fk_root/ROS位置转换成Unity/MachineRoot左手坐标位置。"""
+    x_forward, y_left, z_up = position
+    # 轴约定：ROS +X前 -> Unity +Z，ROS +Y左 -> Unity -X，ROS +Z上 -> Unity +Y。
+    return -float(y_left), float(z_up), float(x_forward)
+
+
+def apply_joint_sign_and_offset(raw_angle_rad: float, joint_sign: float, angle_offset_rad: float) -> float:
+    """把传感器/Orin关节角转换成FK内部关节角。"""
+    return float(raw_angle_rad) * float(joint_sign) + float(angle_offset_rad)
+
+
+def bucket_tip_pitch_rad_from_matrix(matrix: Matrix4) -> float:
+    """计算训练使用的bucket pitch：bucket_tip局部+Z与fk_root +Z的夹角。"""
+    # 关键：齐次矩阵第三列是bucket_tip局部+Z轴在fk_root中的方向，和fk_root +Z点乘即r22。
+    z_dot = max(-1.0, min(1.0, float(matrix[2][2])))
+    return math.acos(z_dot)
+
+
+def bucket_tip_observation_values(unity_position: Vec3, pitch_rad: float) -> list[float]:
+    """构造observation需要的bucket tip状态片段：[x, y, z, pitch_rad]。"""
+    return [
+        float(unity_position[0]),
+        float(unity_position[1]),
+        float(unity_position[2]),
+        float(pitch_rad),
+    ]
+
+
+def bucket_tip_observation_message(unity_position: Vec3, pitch_rad: float) -> Float32MultiArray:
+    """发布无自定义msg版本的bucket tip observation输入。"""
+    message = Float32MultiArray()
+    message.data = bucket_tip_observation_values(unity_position, pitch_rad)
+    return message
 
 
 def quat_from_rpy(roll: float, pitch: float, yaw: float) -> Tuple[float, float, float, float]:

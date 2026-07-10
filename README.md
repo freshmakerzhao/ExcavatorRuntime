@@ -26,6 +26,7 @@ ros2_ws/                 # ROS2 overlay workspace
 rslidar_sdk/             # Airy 版 RoboSense SDK 源码，只读使用
 kinematics/              # 挖掘机 FK / TF，输入关节角，输出 bucket tip
 localmap/                # 感知、LocalMap、OctoMap、RRT、RViz marker 工具
+runtime_bridge/          # PC 与 Orin/STM32 的 UDP 状态/动作中转协议
 rviz/                    # RViz 配置
 docs/                    # 雷达接线、端口、防火墙等运行笔记
 ```
@@ -122,6 +123,18 @@ ros2 topic hz /occupied_cells_vis_array
 python3 -m json.tool localmap/exports/live_latest/local_map.live.json | sed -n '1,60p'
 ```
 
+一键健康检查：
+
+```bash
+localmap/scripts/run_smoke_check.sh
+```
+
+如果希望检查前自动跑一次规划：
+
+```bash
+localmap/scripts/run_smoke_check.sh --run-planning
+```
+
 ## 4. 打开 RViz
 
 另一个终端：
@@ -175,11 +188,19 @@ ros2 topic pub /joint_states sensor_msgs/msg/JointState "{
 }" -r 10
 ```
 
+或者启动关节角滑块窗口：
+
+```bash
+ros2 run excavator_kinematics joint_slider_publisher \
+  --publish-on-change \
+  --initial 0.0 0.0 0.0 0.0
+```
+
 单独启动 bucket tip bridge：
 
 ```bash
-/usr/bin/python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
-  --input-topic /bucket_tip_pose_base \
+python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
+  --input-topic /bucket_tip_pose_map \
   --output-topic /localmap/bucket_tip_machine_root_pose \
   --bridge localmap/config/bucket_tip_tf_bridge.machine_root.json \
   --output-json localmap/exports/live_latest/bucket_tip.machine_root.live.json
@@ -194,7 +215,9 @@ RUN_BUCKET_TIP_BRIDGE=1 localmap/scripts/run_perception_stack.sh
 检查 bucket tip：
 
 ```bash
-ros2 topic echo /bucket_tip_pose_base --once
+ros2 topic echo /bucket_tip_pose_map --once
+ros2 topic echo /bucket_tip_pose_unity --once
+ros2 topic echo /bucket_tip_observation --once
 ros2 topic echo /localmap/bucket_tip_machine_root_pose --once
 python3 -m json.tool localmap/exports/live_latest/bucket_tip.machine_root.live.json
 ```
@@ -210,8 +233,16 @@ source ros2_ws/install/setup.zsh
 
 PLANNING_BOUNDS="-1.5 3.0 -0.70 1.00 -0.5 4.0" \
 OBSTACLE_EXPORT_BOUNDS="-1.5 3.0 -0.42 1.00 -0.5 4.0" \
-WORKSPACE_MODE=MoveToDig \
+TASK_MODE=MoveToDig \
+TARGET_KIND=dig \
+TARGET_ID=mock_dig_001 \
 localmap/scripts/run_planning_once.sh
+```
+
+默认 `mock_dig_001` 是右侧远端可达目标。如果要切到左侧远端目标：
+
+```bash
+TARGET_ID=mock_dig_left_far localmap/scripts/run_planning_once.sh
 ```
 
 输出：
@@ -226,11 +257,127 @@ localmap/exports/live_latest/observation_waypoint_slice.simple_rrt.json
 发布轨迹到 RViz：
 
 ```bash
-/usr/bin/python3 localmap/scripts/publish_trajectory_markers.py \
+python3 localmap/scripts/publish_trajectory_markers.py \
   --trajectory localmap/exports/live_latest/trajectory_command.simple_rrt.json
 ```
 
-## 7. 离线 bag
+只检查本地 JSON 产物，不检查 ROS topic：
+
+```bash
+python3 localmap/apps/diagnostics/run_smoke_check.py --skip-ros
+```
+
+## 7. 可选：本机模拟 Orin 中转
+
+终端 1，启动 PC runtime bridge：
+
+```bash
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+python3 runtime_bridge/apps/pc_runtime_bridge.py \
+  --state-bind-host 127.0.0.1 \
+  --orin-host 127.0.0.1 \
+  --send-zero-action \
+  --print-every 10 \
+  --write-every 10
+```
+
+终端 2，启动 mock Orin relay：
+
+```bash
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+python3 runtime_bridge/apps/mock_orin_relay.py \
+  --pc-host 127.0.0.1 \
+  --rate-hz 10 \
+  --print-every 10
+```
+
+如果要把 Orin 状态发布成 ROS2 `/joint_states`，PC 侧加：
+
+```bash
+--publish-joint-states
+```
+
+连接真实 Orin 时，PC 侧使用：
+
+```bash
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+python3 runtime_bridge/apps/pc_runtime_bridge.py \
+  --state-bind-host 0.0.0.0 \
+  --state-port 18081 \
+  --orin-host 192.168.2.88 \
+  --action-port 18082 \
+  --send-zero-action \
+  --print-every 10 \
+  --write-every 10
+```
+
+这一步只回发零动作，用于验证 Orin -> PC 状态包和 PC -> Orin 动作包通道。
+
+启动 ONNX policy bridge：
+
+```bash
+cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+source /opt/ros/jazzy/setup.zsh
+source ros2_ws/install/setup.zsh
+
+.venv_runtime/bin/python runtime_bridge/apps/pc_policy_bridge.py \
+  --onnx /home/zhaoshuai/workspace_uinty/RL_prj/RLExcavator/Assets/AIModels/ExcavatorTrajectory-7496592.onnx \
+  --state-bind-host 0.0.0.0 \
+  --state-port 18081 \
+  --orin-host 192.168.2.88 \
+  --action-port 18082 \
+  --print-every 1 \
+  --write-every 5
+```
+
+它会接收 Orin `machine_state_v1`，发布 `/joint_states` 给 FK，读取 `/bucket_tip_observation`，组装 38 维 observation，运行 ONNX，并回传 `policy_action`。
+ONNX 输出在 PC 内部仍按训练语义视为 `[-1, 1]` 策略动作；发给 Orin 前会按 `shared/machine_profile.json` 反归一化为物理速度，但 UDP 包里的 `action_type` 仍保持 `normalized_velocity_command` 以兼容 Orin 端解析。其中 `boom/stick/bucket` 单位 m/s，`swing` 单位 rad/s。
+默认安全门开启：如果 `estop=true`、`sensor_valid=false`、`stm32_alive=false`、`control_enabled=false` 或存在 `fault_flags`，仍会计算 ONNX 输出，但实际发给 Orin 的动作是零动作。
+
+到达挖掘点或倾倒点后，可以临时用固定动作脚本执行挖掘/倾倒。该脚本不做路径规划，后续由外部 planner 决定何时启动：
+
+```bash
+python3 runtime_bridge/apps/fixed_action_player.py \
+  --action dig \
+  --state-bind-host 0.0.0.0 \
+  --state-port 18081 \
+  --orin-host 192.168.2.88 \
+  --action-port 18082 \
+  --print-every 1
+```
+
+倾倒动作：
+
+```bash
+python3 runtime_bridge/apps/fixed_action_player.py \
+  --action dump \
+  --state-bind-host 0.0.0.0 \
+  --state-port 18081 \
+  --orin-host 192.168.2.88 \
+  --action-port 18082 \
+  --print-every 1
+```
+
+默认安全门同样开启；如果 Orin 仍发送 `control_enabled=false`，脚本只会发送零动作。台架确认 Orin 不会误执行时，才使用：
+
+```bash
+--send-when-control-disabled
+```
+
+首次使用前需要当前 Python 环境安装 ONNX Runtime：
+
+```bash
+uv venv --python /usr/bin/python3 --system-site-packages .venv_runtime
+uv pip install --python .venv_runtime/bin/python onnxruntime
+```
+
+协议说明见：
+
+```text
+docs/runtime_bridge_protocol.md
+```
+
+## 8. 离线 bag
 
 录一段雷达数据：
 
@@ -245,7 +392,7 @@ timeout --signal=INT 20s ros2 bag record \
 检查 bag：
 
 ```bash
-/usr/bin/python3 localmap/scripts/inspect_bag_points.py \
+python3 localmap/scripts/inspect_bag_points.py \
   bags/<bag_name> \
   --frames 3
 ```

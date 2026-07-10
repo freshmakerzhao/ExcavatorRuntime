@@ -4,7 +4,8 @@ excavator_tf_node:
     publish_map_to_base: true
 
     frames:
-      map: map
+      map: fk_root
+      unity: machine_root
       base: base_link
       swing: swing_link
       boom: boom_link
@@ -20,7 +21,9 @@ excavator_tf_node:
 
     # All lengths are meters. Replace these with CAD or measured dimensions.
     geometry:
-      map_to_base_xyz: [0.0, 0.0, 0.31]
+      # fk_root原点与machine_root重合，但轴向保持ROS/FK约定。
+      # 这里填写的是base_link原点在fk_root/ROS坐标系下的实测坐标。
+      map_to_base_xyz: [-0.06, 0.0, -0.18]
       map_to_base_rpy: [0.0, 0.0, 0.0]
 
       # base_link origin to swing_link origin.
@@ -44,6 +47,14 @@ excavator_tf_node:
     # Use these to align encoder zero with the kinematic model zero.
     angle_offsets:
       swing: 0.0
-      boom: 0.0
+      boom: 0.52
       arm: 0.0
-      bucket: 0.0
+      bucket: 0.52
+
+    # Sensor/Orin angle sign to FK sign.
+    # 当前实测：swing、boom、arm 的电位计正方向与FK正方向相反；bucket保持一致。
+    joint_signs:
+      swing: -1.0
+      boom: -1.0
+      arm: 1.0
+      bucket: 1.0
