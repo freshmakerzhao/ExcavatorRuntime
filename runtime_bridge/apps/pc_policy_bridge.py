@@ -174,6 +174,7 @@ def main() -> int:
     args = build_arg_parser().parse_args()
     try:
         config = load_runtime_config(args.config)
+        config.artifacts.require_policy_inputs()
         machine_profile = load_machine_profile(config.artifacts.machine_profile)
         observation_builder = ObservationBuilder(machine_profile, task_mode=args.task_mode)
         policy = OnnxPolicy(config.artifacts.onnx)

@@ -66,6 +66,7 @@ def main() -> int:
     args = build_arg_parser().parse_args()
     try:
         config = load_runtime_config(args.config)
+        config.artifacts.require_machine_profile()
         machine_profile = load_machine_profile(config.artifacts.machine_profile)
     except (OSError, ValueError) as exc:
         print(f"fixed action configuration error: {exc}", file=sys.stderr, flush=True)

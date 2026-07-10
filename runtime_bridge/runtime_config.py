@@ -42,6 +42,21 @@ class ArtifactConfig:
     waypoint_slice: Path
     latest_observation: Path
 
+    def require_policy_inputs(self) -> None:
+        """策略入口启动前要求模型、机型配置和 waypoint 产物全部存在。"""
+        self._require_file("onnx")
+        self._require_file("machine_profile")
+        self._require_file("waypoint_slice")
+
+    def require_machine_profile(self) -> None:
+        """固定动作入口只依赖机型配置，不要求策略制品。"""
+        self._require_file("machine_profile")
+
+    def _require_file(self, name: str) -> None:
+        path = getattr(self, name)
+        if not path.is_file():
+            raise RuntimeConfigError(f"artifacts.{name} 不存在或不是文件: {path}")
+
 
 @dataclass(frozen=True)
 class PolicyConfig:
@@ -210,10 +225,6 @@ def load_runtime_config(
         waypoint_slice=resolve("waypoint_slice", artifacts["waypoint_slice"]),
         latest_observation=resolve("latest_observation", artifacts["latest_observation"]),
     )
-    for name in ("onnx", "machine_profile", "waypoint_slice"):
-        artifact_path = getattr(artifact_config, name)
-        if not artifact_path.is_file():
-            raise RuntimeConfigError(f"artifacts.{name} 不存在或不是文件: {artifact_path}")
 
     return RuntimeConfig(
         network=NetworkConfig(**network),

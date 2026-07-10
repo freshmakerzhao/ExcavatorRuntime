@@ -121,14 +121,27 @@ class RuntimeConfigTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "network.*缺少字段.*action_port"):
                 load_runtime_config(config_path, project_root=project_root)
 
-    def test_rejects_missing_input_artifacts_before_runtime_starts(self):
+    def test_policy_artifacts_are_checked_only_when_policy_runtime_requests_them(self):
         with tempfile.TemporaryDirectory() as directory:
             project_root = Path(directory)
             config_path = project_root / "runtime.json"
             config_path.write_text(json.dumps(valid_config_payload()), encoding="utf-8")
 
+            config = load_runtime_config(config_path, project_root=project_root)
+
             with self.assertRaisesRegex(ValueError, "artifacts.onnx.*不存在"):
-                load_runtime_config(config_path, project_root=project_root)
+                config.artifacts.require_policy_inputs()
+
+    def test_fixed_action_requires_only_machine_profile_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project_root = Path(directory)
+            (project_root / "machine_profile.json").touch()
+            config_path = project_root / "runtime.json"
+            config_path.write_text(json.dumps(valid_config_payload()), encoding="utf-8")
+
+            config = load_runtime_config(config_path, project_root=project_root)
+
+            config.artifacts.require_machine_profile()
 
     def test_rejects_unknown_action_time_source(self):
         with tempfile.TemporaryDirectory() as directory:
