@@ -22,6 +22,7 @@ from runtime_bridge.protocol import (
     encode_packet,
     make_zero_action,
 )
+from runtime_bridge.action_journal import ActionJournalUnavailable, RecordedUdpSender
 from runtime_bridge.runtime_config import DEFAULT_RUNTIME_CONFIG, load_runtime_config
 
 
@@ -103,14 +104,32 @@ def main() -> int:
     recv_sock.bind(config.network.state_endpoint)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     action_destination = config.network.action_endpoint
+    try:
+        action_sender = (
+            RecordedUdpSender(
+                send_sock,
+                action_destination,
+                journal_config=config.action_journal,
+                source="pc_runtime_bridge",
+            )
+            if args.reply_zero
+            else None
+        )
+    except OSError as exc:
+        print(f"runtime action journal startup failed: {exc}", file=sys.stderr, flush=True)
+        recv_sock.close()
+        send_sock.close()
+        return 2
     joint_state_publisher = JointStatePublisher() if args.publish_joint_states else None
 
     state_count = 0
     action_seq = 0
+    exit_code = 0
     print(
         "pc runtime diagnostic started: "
         f"state <- {config.network.state_endpoint}, action -> {action_destination}, "
-        f"reply_zero={args.reply_zero}, publish_joint_states={args.publish_joint_states}",
+        f"reply_zero={args.reply_zero}, publish_joint_states={args.publish_joint_states}, "
+        f"action_journal={action_sender.journal_path if action_sender else 'disabled'}",
         flush=True,
     )
 
@@ -133,7 +152,7 @@ def main() -> int:
             if args.reply_zero:
                 # 关键：零动作只用于链路联调，不代表最终 ONNX 输出。
                 action = make_zero_action(action_seq, valid_for_ms=config.network.action_valid_ms)
-                send_sock.sendto(encode_packet(action), action_destination)
+                action_sender.send(encode_packet(action))
                 action_seq += 1
 
             if config.diagnostics.print_every > 0 and state_count % config.diagnostics.print_every == 0:
@@ -154,12 +173,21 @@ def main() -> int:
                     )
     except KeyboardInterrupt:
         print("pc runtime bridge stopped", flush=True)
+    except ActionJournalUnavailable as exc:
+        print(f"pc runtime bridge stopped: {exc}", file=sys.stderr, flush=True)
+        exit_code = 3
     finally:
         if joint_state_publisher is not None:
             joint_state_publisher.close()
+        if action_sender is not None:
+            try:
+                action_sender.close()
+            except ActionJournalUnavailable as exc:
+                print(f"pc runtime journal close failed: {exc}", file=sys.stderr, flush=True)
+                exit_code = 3
         recv_sock.close()
         send_sock.close()
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

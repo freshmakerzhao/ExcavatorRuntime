@@ -19,6 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from runtime_bridge.fixed_actions import FixedActionExecutor, FixedActionStatus, fixed_action_sequence
+from runtime_bridge.action_journal import ActionJournalUnavailable, RecordedUdpSender
 from runtime_bridge.observation import load_machine_profile
 from runtime_bridge.protocol import (
     MachineStatePacket,
@@ -88,14 +89,32 @@ def main() -> int:
     recv_sock.bind(config.network.state_endpoint)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     destination = config.network.action_endpoint
+    try:
+        action_sender = (
+            RecordedUdpSender(
+                send_sock,
+                destination,
+                journal_config=config.action_journal,
+                source="fixed_action_player",
+            )
+            if args.enable_motion
+            else None
+        )
+    except OSError as exc:
+        print(f"fixed action journal startup failed: {exc}", file=sys.stderr, flush=True)
+        recv_sock.close()
+        send_sock.close()
+        return 2
     action_seq = 0
     state_count = 0
     started_at_s = time.monotonic()
+    exit_code = 0
 
     print(
         f"fixed action player started: action={args.action}, "
         f"state <- {config.network.state_endpoint}, action -> {destination}, "
-        f"enable_motion={args.enable_motion}",
+        f"enable_motion={args.enable_motion}, "
+        f"action_journal={action_sender.journal_path if action_sender else 'disabled'}",
         flush=True,
     )
 
@@ -136,7 +155,7 @@ def main() -> int:
                 status = FixedActionStatus(f"safety_zero:{reason}", executor.step_index, "安全零动作", 0.0, executor.done)
 
             if args.enable_motion:
-                send_sock.sendto(encode_packet(action_packet), destination)
+                action_sender.send(encode_packet(action_packet))
 
             action_seq += 1
             if config.diagnostics.print_every > 0 and state_count % config.diagnostics.print_every == 0:
@@ -150,13 +169,22 @@ def main() -> int:
             if status.done:
                 # 完成后已经发送了一帧零动作，退出让上层 planner 决定下一阶段。
                 print(f"fixed action completed: action={args.action}", flush=True)
-                return 0
+                break
     except KeyboardInterrupt:
         print("fixed action player stopped", flush=True)
+    except ActionJournalUnavailable as exc:
+        print(f"fixed action player stopped: {exc}", file=sys.stderr, flush=True)
+        exit_code = 3
     finally:
+        if action_sender is not None:
+            try:
+                action_sender.close()
+            except ActionJournalUnavailable as exc:
+                print(f"fixed action journal close failed: {exc}", file=sys.stderr, flush=True)
+                exit_code = 3
         recv_sock.close()
         send_sock.close()
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

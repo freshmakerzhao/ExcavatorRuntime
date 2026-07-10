@@ -1,5 +1,5 @@
 {
-  "schema": "runtime_bridge_config_v2",
+  "schema": "runtime_bridge_config_v3",
   "network": {
     "state_bind_host": "127.0.0.1",
     "state_port": 18081,
@@ -28,5 +28,10 @@
   "diagnostics": {
     "print_every": 10,
     "write_every": 10
+  },
+  "action_journal": {
+    "directory": "runtime_bridge/exports/action_journal_mock",
+    "max_file_bytes": 8388608,
+    "retained_files": 4
   }
 }

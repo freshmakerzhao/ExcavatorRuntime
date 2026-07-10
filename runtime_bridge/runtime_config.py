@@ -10,7 +10,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RUNTIME_CONFIG = PROJECT_ROOT / "runtime_bridge" / "config" / "runtime.json"
-RUNTIME_CONFIG_SCHEMA = "runtime_bridge_config_v2"
+RUNTIME_CONFIG_SCHEMA = "runtime_bridge_config_v3"
 
 
 class RuntimeConfigError(ValueError):
@@ -80,12 +80,20 @@ class DiagnosticsConfig:
 
 
 @dataclass(frozen=True)
+class ActionJournalConfig:
+    directory: Path
+    max_file_bytes: int
+    retained_files: int
+
+
+@dataclass(frozen=True)
 class RuntimeConfig:
     network: NetworkConfig
     artifacts: ArtifactConfig
     policy: PolicyConfig
     fixed_action: FixedActionConfig
     diagnostics: DiagnosticsConfig
+    action_journal: ActionJournalConfig
 
 
 def _validate_fields(section: str, data: object, expected: set[str]) -> None:
@@ -140,13 +148,22 @@ def load_runtime_config(
     _validate_fields(
         "root",
         data,
-        {"schema", "network", "artifacts", "policy", "fixed_action", "diagnostics"},
+        {
+            "schema",
+            "network",
+            "artifacts",
+            "policy",
+            "fixed_action",
+            "diagnostics",
+            "action_journal",
+        },
     )
     network = data["network"]
     artifacts = data["artifacts"]
     policy = data["policy"]
     fixed_action = data["fixed_action"]
     diagnostics = data["diagnostics"]
+    action_journal = data["action_journal"]
     _validate_fields(
         "network",
         network,
@@ -162,7 +179,12 @@ def load_runtime_config(
     _validate_fields(
         "artifacts",
         artifacts,
-        {"onnx", "machine_profile", "waypoint_slice", "latest_observation"},
+        {
+            "onnx",
+            "machine_profile",
+            "waypoint_slice",
+            "latest_observation",
+        },
     )
     _validate_fields("policy", policy, {"bucket_tip_timeout_ms"})
     _validate_fields(
@@ -171,6 +193,11 @@ def load_runtime_config(
         {"kp", "min_action", "max_action", "tolerance", "step_timeout_s", "hold_s"},
     )
     _validate_fields("diagnostics", diagnostics, {"print_every", "write_every"})
+    _validate_fields(
+        "action_journal",
+        action_journal,
+        {"directory", "max_file_bytes", "retained_files"},
+    )
     _require_non_empty_string("network.state_bind_host", network.get("state_bind_host"))
     _require_non_empty_string("network.orin_host", network.get("orin_host"))
     _require_int_range("network.state_port", network.get("state_port"), 1, 65535)
@@ -189,6 +216,18 @@ def load_runtime_config(
     )
     _require_int_range("diagnostics.print_every", diagnostics.get("print_every"), 0, 1000000)
     _require_int_range("diagnostics.write_every", diagnostics.get("write_every"), 0, 1000000)
+    _require_int_range(
+        "action_journal.max_file_bytes",
+        action_journal.get("max_file_bytes"),
+        1024,
+        1073741824,
+    )
+    _require_int_range(
+        "action_journal.retained_files",
+        action_journal.get("retained_files"),
+        1,
+        1000,
+    )
     _require_number_range("fixed_action.kp", fixed_action.get("kp"), 0.000001, 100.0)
     min_action = _require_number_range(
         "fixed_action.min_action",
@@ -215,15 +254,15 @@ def load_runtime_config(
 
     def resolve(name: str, value: object) -> Path:
         if not isinstance(value, str) or not value.strip():
-            raise RuntimeConfigError(f"artifacts.{name} 必须是非空路径字符串")
+            raise RuntimeConfigError(f"{name} 必须是非空路径字符串")
         candidate = Path(value)
         return candidate if candidate.is_absolute() else project_root / candidate
 
     artifact_config = ArtifactConfig(
-        onnx=resolve("onnx", artifacts["onnx"]),
-        machine_profile=resolve("machine_profile", artifacts["machine_profile"]),
-        waypoint_slice=resolve("waypoint_slice", artifacts["waypoint_slice"]),
-        latest_observation=resolve("latest_observation", artifacts["latest_observation"]),
+        onnx=resolve("artifacts.onnx", artifacts["onnx"]),
+        machine_profile=resolve("artifacts.machine_profile", artifacts["machine_profile"]),
+        waypoint_slice=resolve("artifacts.waypoint_slice", artifacts["waypoint_slice"]),
+        latest_observation=resolve("artifacts.latest_observation", artifacts["latest_observation"]),
     )
 
     return RuntimeConfig(
@@ -232,4 +271,9 @@ def load_runtime_config(
         policy=PolicyConfig(**policy),
         fixed_action=FixedActionConfig(**fixed_action),
         diagnostics=DiagnosticsConfig(**diagnostics),
+        action_journal=ActionJournalConfig(
+            directory=resolve("action_journal.directory", action_journal["directory"]),
+            max_file_bytes=action_journal["max_file_bytes"],
+            retained_files=action_journal["retained_files"],
+        ),
     )

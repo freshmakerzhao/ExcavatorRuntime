@@ -135,3 +135,17 @@ python3 runtime_bridge/apps/pc_runtime_bridge.py --reply-zero
 ```
 
 这条命令会按 `runtime_bridge/config/runtime.json` 监听 Orin 的 `machine_state_v1`，写出 `runtime_bridge/exports/latest_state.json`，并回发零动作。零动作只用于通信联调。
+
+## PC→Orin发送记录
+
+策略动作、固定动作和诊断零动作只有在 UDP `sendto` 成功后才会写入本地 JSONL。目录与轮转策略由
+`runtime_bridge_config_v3` 的 `action_journal` section 指定；正式配置目录默认为：
+
+```text
+runtime_bridge/exports/action_journal/
+```
+
+每次进程启动创建独立会话文件，记录格式为 `pc_orin_action_send_v1`。其中 `packet` 方便人工检查，
+`payload_base64` 是实际发送字节的可回放副本，`payload_sha256` 用于复测前校验内容未变化。
+正式配置每个文件最大64 MiB并保留16个文件；超过保留数量时删除最旧文件，避免长期运行耗尽磁盘。
+队列满或写盘失败会使后续动作在发送前失败并结束发送进程。由于只有成功发送才入日志，未启用动作发送的dry-run不会产生容易误解的“已发送”记录。

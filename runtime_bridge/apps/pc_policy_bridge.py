@@ -16,6 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from runtime_bridge.fixed_actions import physical_velocity_action_from_normalized
+from runtime_bridge.action_journal import ActionJournalUnavailable, RecordedUdpSender
 from runtime_bridge.observation import (
     BucketTipObservation,
     ObservationBuilder,
@@ -188,14 +189,33 @@ def main() -> int:
     recv_sock.bind(config.network.state_endpoint)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     action_destination = config.network.action_endpoint
+    try:
+        action_sender = (
+            RecordedUdpSender(
+                send_sock,
+                action_destination,
+                journal_config=config.action_journal,
+                source="pc_policy_bridge",
+            )
+            if args.enable_motion
+            else None
+        )
+    except OSError as exc:
+        print(f"policy action journal startup failed: {exc}", file=sys.stderr, flush=True)
+        ros_io.close()
+        recv_sock.close()
+        send_sock.close()
+        return 2
     previous_policy_action = [0.0, 0.0, 0.0, 0.0]
     state_count = 0
     action_seq = 0
+    exit_code = 0
 
     print(
         "pc policy bridge started: "
         f"state <- {config.network.state_endpoint}, action -> {action_destination}, "
-        f"onnx={config.artifacts.onnx}, enable_motion={args.enable_motion}, task_mode={args.task_mode}",
+        f"onnx={config.artifacts.onnx}, enable_motion={args.enable_motion}, task_mode={args.task_mode}, "
+        f"action_journal={action_sender.journal_path if action_sender else 'disabled'}",
         flush=True,
     )
 
@@ -267,7 +287,7 @@ def main() -> int:
                 )
 
             if args.enable_motion:
-                send_sock.sendto(encode_packet(sent_packet), action_destination)
+                action_sender.send(encode_packet(sent_packet))
             previous_policy_action = list(policy_action) if send_policy else [0.0, 0.0, 0.0, 0.0]
             action_seq += 1
 
@@ -287,11 +307,20 @@ def main() -> int:
                 )
     except KeyboardInterrupt:
         print("pc policy bridge stopped", flush=True)
+    except ActionJournalUnavailable as exc:
+        print(f"pc policy bridge stopped: {exc}", file=sys.stderr, flush=True)
+        exit_code = 3
     finally:
         ros_io.close()
+        if action_sender is not None:
+            try:
+                action_sender.close()
+            except ActionJournalUnavailable as exc:
+                print(f"pc policy bridge journal close failed: {exc}", file=sys.stderr, flush=True)
+                exit_code = 3
         recv_sock.close()
         send_sock.close()
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

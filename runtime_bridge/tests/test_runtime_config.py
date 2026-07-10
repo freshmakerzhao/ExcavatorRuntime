@@ -8,7 +8,7 @@ from runtime_bridge.runtime_config import load_runtime_config
 
 def valid_config_payload():
     return {
-        "schema": "runtime_bridge_config_v2",
+        "schema": "runtime_bridge_config_v3",
         "network": {
             "state_bind_host": "0.0.0.0",
             "state_port": 18081,
@@ -22,6 +22,11 @@ def valid_config_payload():
             "machine_profile": "machine_profile.json",
             "waypoint_slice": "waypoint_slice.json",
             "latest_observation": "exports/latest_observation.json",
+        },
+        "action_journal": {
+            "directory": "exports/action_journal",
+            "max_file_bytes": 67108864,
+            "retained_files": 16,
         },
         "policy": {"bucket_tip_timeout_ms": 500},
         "fixed_action": {
@@ -37,6 +42,22 @@ def valid_config_payload():
 
 
 class RuntimeConfigTest(unittest.TestCase):
+    def test_v3_resolves_local_action_journal_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project_root = Path(directory)
+            config_data = valid_config_payload()
+            config_path = project_root / "runtime.json"
+            config_path.write_text(json.dumps(config_data), encoding="utf-8")
+
+            config = load_runtime_config(config_path, project_root=project_root)
+
+        self.assertEqual(
+            config.action_journal.directory,
+            project_root / "exports/action_journal",
+        )
+        self.assertEqual(config.action_journal.max_file_bytes, 67108864)
+        self.assertEqual(config.action_journal.retained_files, 16)
+
     def test_loads_runtime_settings_and_resolves_artifact_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             project_root = Path(directory)
@@ -83,18 +104,18 @@ class RuntimeConfigTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "schema"):
                 load_runtime_config(config_path, project_root=project_root)
 
-    def test_rejects_v1_config_after_fixed_action_settings_were_added(self):
+    def test_rejects_v2_config_after_action_journal_was_added(self):
         with tempfile.TemporaryDirectory() as directory:
             project_root = Path(directory)
             for relative_path in ("model.onnx", "machine_profile.json", "waypoint_slice.json"):
                 (project_root / relative_path).touch()
             config_data = valid_config_payload()
-            config_data["schema"] = "runtime_bridge_config_v1"
-            del config_data["fixed_action"]
+            config_data["schema"] = "runtime_bridge_config_v2"
+            del config_data["action_journal"]
             config_path = project_root / "runtime.json"
             config_path.write_text(json.dumps(config_data), encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "schema.*runtime_bridge_config_v2"):
+            with self.assertRaisesRegex(ValueError, "schema.*runtime_bridge_config_v3"):
                 load_runtime_config(config_path, project_root=project_root)
 
     def test_rejects_boolean_or_out_of_range_network_numbers(self):
@@ -161,6 +182,8 @@ class RuntimeConfigTest(unittest.TestCase):
             (("network", "action_valid_ms"), True, "network.action_valid_ms"),
             (("policy", "bucket_tip_timeout_ms"), 0, "policy.bucket_tip_timeout_ms"),
             (("diagnostics", "print_every"), -1, "diagnostics.print_every"),
+            (("action_journal", "max_file_bytes"), 0, "action_journal.max_file_bytes"),
+            (("action_journal", "retained_files"), 0, "action_journal.retained_files"),
         )
         for field_path, invalid_value, expected_error in invalid_cases:
             with self.subTest(field=expected_error), tempfile.TemporaryDirectory() as directory:

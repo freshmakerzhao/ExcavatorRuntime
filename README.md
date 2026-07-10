@@ -319,6 +319,16 @@ source ros2_ws/install/setup.zsh
 ONNX 输出在 PC 内部仍按训练语义视为 `[-1, 1]` 策略动作；发给 Orin 前会按 `shared/machine_profile.json` 反归一化为物理速度，但 UDP 包里的 `action_type` 仍保持 `normalized_velocity_command` 以兼容 Orin 端解析。其中 `boom/stick/bucket` 单位 m/s，`swing` 单位 rad/s。
 默认安全门开启：如果 `estop=true`、`sensor_valid=false`、`stm32_alive=false`、`control_enabled=false` 或存在 `fault_flags`，仍会计算 ONNX 输出，但实际发给 Orin 的动作是零动作。
 
+每个真正成功发往 Orin 的 UDP 动作都会异步追加到本地会话日志：
+
+```text
+runtime_bridge/exports/action_journal/<发送入口>.<UTC启动时间>.<PID>.partNNNN.jsonl
+```
+
+每条记录包含 PC 记录时间、发送入口、Orin 目标地址、可读 packet、精确 payload 的 Base64、字节数和 SHA-256。日志写盘在线程中完成，不把磁盘延迟加入控制循环；程序启动时会打印本次日志路径。队列满或写盘失败后，下一帧动作会在 `sendto` 之前被拒绝，进程返回错误，不允许长期“继续控制但停止记录”。
+
+容量策略统一位于 `runtime_bridge/config/runtime.json` 的 `action_journal` section。正式配置按每个文件 64 MiB、保留 16 个文件轮转，总量约 1 GiB，超过后删除最旧记录；mock 配置单独写入 `runtime_bridge/exports/action_journal_mock/`。未增加 `--enable-motion`（或诊断入口未增加 `--reply-zero`）时没有实际发送，因此也不会生成发送日志。
+
 到达挖掘点或倾倒点后，可以临时用固定动作脚本执行挖掘/倾倒。该脚本不做路径规划，后续由外部 planner 决定何时启动：
 
 ```bash
@@ -331,7 +341,7 @@ python3 runtime_bridge/apps/fixed_action_player.py dig
 python3 runtime_bridge/apps/fixed_action_player.py dump
 ```
 
-固定动作增益、阈值、超时和网络设置同样读取 `runtime_bridge/config/runtime.json`。配置 schema 已升级为 `runtime_bridge_config_v2`，自定义配置必须包含 `fixed_action` section，旧 v1 配置会明确拒绝而不会静默补默认值。上述命令默认只计算和打印，不发送 UDP 动作；完成单轴方向、限位、急停和现场安全检查后，必须显式增加 `--enable-motion` 才会向 Orin 发送动作。`control_enabled=false` 时始终只生成零动作，不提供绕过参数。
+固定动作增益、阈值、超时和网络设置同样读取 `runtime_bridge/config/runtime.json`。配置 schema 已升级为 `runtime_bridge_config_v3`，自定义配置必须包含 `action_journal` section；旧 v2 配置会明确拒绝而不会静默补默认值。上述命令默认只计算和打印，不发送 UDP 动作；完成单轴方向、限位、急停和现场安全检查后，必须显式增加 `--enable-motion` 才会向 Orin 发送动作。`control_enabled=false` 时始终只生成零动作，不提供绕过参数。
 
 首次使用前需要当前 Python 环境安装 ONNX Runtime：
 
