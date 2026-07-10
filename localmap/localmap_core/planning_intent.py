@@ -18,7 +18,7 @@ class PlanningIntent:
 
 
 def resolve_planning_intent(
-    local_map: dict[str, Any],
+    local_map: Mapping[str, Any],
     target_id: str,
     task_mode_by_target_kind: Mapping[str, str],
 ) -> PlanningIntent:
