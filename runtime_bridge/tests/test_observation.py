@@ -3,7 +3,12 @@ import unittest
 
 from runtime_bridge.observation import BucketTipObservation, ObservationBuilder, normalize_position
 from runtime_bridge.protocol import MachineStatePacket, decode_packet, encode_packet
-from runtime_bridge.apps.pc_policy_bridge import denormalize_policy_action, make_policy_action, should_send_policy
+from runtime_bridge.apps.pc_policy_bridge import (
+    build_arg_parser,
+    denormalize_policy_action,
+    make_policy_action,
+    should_send_policy,
+)
 
 
 def sample_profile():
@@ -51,6 +56,12 @@ def sample_state(control_enabled=False):
 
 
 class ObservationBuilderTest(unittest.TestCase):
+    def test_policy_bridge_requires_explicit_motion_enable(self):
+        parser = build_arg_parser()
+
+        self.assertFalse(parser.parse_args([]).enable_motion)
+        self.assertTrue(parser.parse_args(["--enable-motion"]).enable_motion)
+
     def test_builds_locked_38d_observation_indices(self):
         builder = ObservationBuilder(sample_profile(), task_mode="MoveToDig")
         waypoint_values = [i / 100.0 for i in range(12)]

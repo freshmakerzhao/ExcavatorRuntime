@@ -64,7 +64,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--print-every", type=int, default=1, help="每多少帧打印一次状态和动作")
     parser.add_argument("--write-every", type=int, default=5, help="每多少帧写一次latest_observation.json")
     parser.add_argument("--latest-observation-json", type=Path, default=DEFAULT_LATEST_OBS, help="最近一次38维observation调试输出")
-    parser.add_argument("--dry-run", action="store_true", help="只推理和打印，不向Orin发送UDP动作")
+    parser.add_argument(
+        "--enable-motion",
+        action="store_true",
+        help="显式允许向Orin发送UDP动作；默认只推理和打印",
+    )
     parser.add_argument(
         "--action-time-source",
         choices=("orin", "pc"),
@@ -223,7 +227,7 @@ def main() -> int:
     print(
         "pc policy bridge started: "
         f"state <- {args.state_bind_host}:{args.state_port}, action -> {action_destination}, "
-        f"onnx={args.onnx}, dry_run={args.dry_run}, task_mode={args.task_mode}",
+        f"onnx={args.onnx}, enable_motion={args.enable_motion}, task_mode={args.task_mode}",
         flush=True,
     )
 
@@ -290,7 +294,7 @@ def main() -> int:
                     stamp_ms=action_stamp_ms,
                 )
 
-            if not args.dry_run:
+            if args.enable_motion:
                 send_sock.sendto(encode_packet(sent_packet), action_destination)
             previous_policy_action = list(policy_action) if send_policy else [0.0, 0.0, 0.0, 0.0]
             action_seq += 1

@@ -330,7 +330,7 @@ source ros2_ws/install/setup.zsh
   --write-every 5
 ```
 
-它会接收 Orin `machine_state_v1`，发布 `/joint_states` 给 FK，读取 `/bucket_tip_observation`，组装 38 维 observation，运行 ONNX，并回传 `policy_action`。
+它会接收 Orin `machine_state_v1`，发布 `/joint_states` 给 FK，读取 `/bucket_tip_observation`，组装 38 维 observation 并运行 ONNX。默认不会发送 UDP 动作；完成离线检查和现场安全确认后，必须显式增加 `--enable-motion` 才会向 Orin 发送 `policy_action`。
 ONNX 输出在 PC 内部仍按训练语义视为 `[-1, 1]` 策略动作；发给 Orin 前会按 `shared/machine_profile.json` 反归一化为物理速度，但 UDP 包里的 `action_type` 仍保持 `normalized_velocity_command` 以兼容 Orin 端解析。其中 `boom/stick/bucket` 单位 m/s，`swing` 单位 rad/s。
 默认安全门开启：如果 `estop=true`、`sensor_valid=false`、`stm32_alive=false`、`control_enabled=false` 或存在 `fault_flags`，仍会计算 ONNX 输出，但实际发给 Orin 的动作是零动作。
 
