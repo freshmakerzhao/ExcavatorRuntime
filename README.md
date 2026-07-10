@@ -234,8 +234,9 @@ source ros2_ws/install/setup.zsh
 localmap/scripts/run_planning_once.sh mock_dig_001
 ```
 
-目标类型和任务模式由 `target_id` 在当前 LocalMap 中的位置自动推导。稳定的算法参数统一保存在
-`localmap/config/planning.json`，现场运行不再通过环境变量逐项覆盖。如果要切到左侧远端目标：
+目标类型和任务模式由 `target_id` 在当前 LocalMap 中的位置自动推导。规划算法参数保存在
+`localmap/config/planning.json`；共享的frame、live路径、OctoMap topic和bounds由它引用的
+`localmap/config/perception.json` 派生，现场运行不再通过环境变量逐项覆盖。如果要切到左侧远端目标：
 
 ```bash
 localmap/scripts/run_planning_once.sh mock_dig_left_far

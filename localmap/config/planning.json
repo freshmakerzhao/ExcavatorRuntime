@@ -1,27 +1,21 @@
 {
-  "schema": "planning_profile_v1",
+  "schema": "planning_profile_v2",
   "profile_id": "scale_excavator_live",
-  "expected_frame": "machine_root",
   "inputs": {
-    "live_local_map": "localmap/exports/live_latest/local_map.live.json",
-    "live_bucket_tip": "localmap/exports/live_latest/bucket_tip.machine_root.live.json",
-    "octomap_topic": "/occupied_cells_vis_array",
+    "perception_profile": "localmap/config/perception.json",
     "machine_profile": "../shared/machine_profile.json",
     "reachable_workspace": "../shared/reachable_workspaces/scale_excavator_workspace.json"
   },
-  "output_dir": "localmap/exports/live_latest",
   "freshness": {
     "local_map_max_age_ms": 500,
     "bucket_tip_max_age_ms": 500,
     "octomap_timeout_s": 5.0
   },
   "obstacle_adapter": {
-    "bounds": [-1.5, 3.0, -0.42, 1.0, -0.5, 4.0],
     "box_size_m": 0.2,
     "max_obstacles": 1000
   },
   "planner": {
-    "bounds": [-1.5, 3.0, -0.7, 1.0, -0.5, 4.0],
     "collision_radius_m": 0.05,
     "step_size_m": 0.2,
     "edge_check_step_m": 0.04,

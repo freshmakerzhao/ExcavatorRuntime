@@ -11,31 +11,25 @@ sys.path.insert(0, str(LOCALMAP_DIR))
 from localmap_core.planning_profile import load_planning_profile
 
 
-def valid_profile_payload():
+def valid_planning_payload():
     return {
-        "schema": "planning_profile_v1",
+        "schema": "planning_profile_v2",
         "profile_id": "scale_excavator_live",
-        "expected_frame": "machine_root",
         "inputs": {
-            "live_local_map": "localmap/exports/live_latest/local_map.live.json",
-            "live_bucket_tip": "localmap/exports/live_latest/bucket_tip.machine_root.live.json",
-            "octomap_topic": "/occupied_cells_vis_array",
+            "perception_profile": "localmap/config/perception.json",
             "machine_profile": "../shared/machine_profile.json",
             "reachable_workspace": "../shared/reachable_workspaces/scale_excavator_workspace.json",
         },
-        "output_dir": "localmap/exports/live_latest",
         "freshness": {
             "local_map_max_age_ms": 500,
             "bucket_tip_max_age_ms": 500,
             "octomap_timeout_s": 5.0,
         },
         "obstacle_adapter": {
-            "bounds": [-1.5, 3.0, -0.42, 1.0, -0.5, 4.0],
             "box_size_m": 0.2,
             "max_obstacles": 1000,
         },
         "planner": {
-            "bounds": [-1.5, 3.0, -0.7, 1.0, -0.5, 4.0],
             "collision_radius_m": 0.05,
             "step_size_m": 0.2,
             "edge_check_step_m": 0.04,
@@ -53,62 +47,99 @@ def valid_profile_payload():
     }
 
 
+def valid_perception_payload():
+    return {
+        "schema": "perception_profile_v1",
+        "profile_id": "test_live",
+        "expected_frame": "machine_root",
+        "inputs": {
+            "rslidar_config": "runtime/lidar.yaml",
+            "extrinsics": "localmap/config/extrinsics.json",
+            "targets": "localmap/config/targets.json",
+            "bucket_tip_bridge": "localmap/config/bridge.json",
+        },
+        "outputs": {
+            "live_local_map": "runtime/live/local_map.json",
+            "live_bucket_tip": "runtime/live/bucket_tip.json",
+            "log_dir": "runtime/logs",
+        },
+        "topics": {
+            "raw_cloud": "/raw_cloud",
+            "machine_cloud": "/machine_cloud",
+            "octomap_cells": "/octomap_cells",
+            "bucket_tip_fk": "/bucket_tip_fk",
+            "bucket_tip_machine_root": "/bucket_tip_machine_root",
+        },
+        "local_map": {
+            "bounds": [-2.0, 3.0, -0.8, 1.0, -0.5, 4.0],
+            "write_every": 5,
+            "publish_every": 10,
+        },
+        "octomap": {
+            "resolution_m": 0.05,
+            "max_range_m": 4.0,
+            "filter_ground_plane": False,
+            "reset_interval_s": 1.0,
+            "crop_bounds": [-1.5, 3.0, -0.42, 1.0, -0.5, 4.0],
+        },
+    }
+
+
+def write_profile_pair(project_root: Path, planning_data=None, perception_data=None) -> Path:
+    perception_path = project_root / "localmap/config/perception.json"
+    perception_path.parent.mkdir(parents=True)
+    perception_path.write_text(
+        json.dumps(perception_data or valid_perception_payload()),
+        encoding="utf-8",
+    )
+    planning_path = project_root / "planning.json"
+    planning_path.write_text(
+        json.dumps(planning_data or valid_planning_payload()),
+        encoding="utf-8",
+    )
+    return planning_path
+
+
 class PlanningProfileTest(unittest.TestCase):
-    def test_loads_profile_and_derives_internal_artifact_paths(self):
+    def test_derives_shared_contract_from_perception_profile(self):
         with tempfile.TemporaryDirectory() as directory:
             project_root = Path(directory)
-            profile_path = project_root / "planning.json"
-            profile_path.write_text(json.dumps(valid_profile_payload()), encoding="utf-8")
+            profile = load_planning_profile(
+                write_profile_pair(project_root),
+                project_root=project_root,
+            )
 
-            profile = load_planning_profile(profile_path, project_root=project_root)
-
-        self.assertEqual(profile.profile_id, "scale_excavator_live")
         self.assertEqual(profile.expected_frame, "machine_root")
-        self.assertEqual(profile.inputs.live_local_map, project_root / "localmap/exports/live_latest/local_map.live.json")
-        self.assertEqual(profile.outputs.trajectory.name, "trajectory_command.simple_rrt.json")
-        self.assertEqual(profile.outputs.observation_slice.name, "observation_waypoint_slice.simple_rrt.json")
-        self.assertEqual(profile.planner.bounds, (-1.5, 3.0, -0.7, 1.0, -0.5, 4.0))
-        self.assertEqual(profile.planner.goal_mask_radius_m, 0.45)
-        self.assertEqual(profile.planner.max_iterations, 6000)
-        self.assertEqual(profile.task_mode_by_target_kind["dump"], "CarryMaterial")
+        self.assertEqual(profile.inputs.live_local_map, project_root / "runtime/live/local_map.json")
+        self.assertEqual(profile.inputs.live_bucket_tip, project_root / "runtime/live/bucket_tip.json")
+        self.assertEqual(profile.inputs.octomap_topic, "/octomap_cells")
+        self.assertEqual(profile.outputs.directory, project_root / "runtime/live")
+        self.assertEqual(profile.obstacle_adapter.bounds, (-1.5, 3.0, -0.42, 1.0, -0.5, 4.0))
+        self.assertEqual(profile.planner.bounds, (-2.0, 3.0, -0.8, 1.0, -0.5, 4.0))
 
     def test_rejects_unknown_profile_fields(self):
+        data = valid_planning_payload()
+        data["planner"]["max_iteration"] = 10
+
         with tempfile.TemporaryDirectory() as directory:
             project_root = Path(directory)
-            profile_data = valid_profile_payload()
-            profile_data["planner"]["max_iteration"] = 10
-            profile_path = project_root / "planning.json"
-            profile_path.write_text(json.dumps(profile_data), encoding="utf-8")
-
             with self.assertRaisesRegex(ValueError, "planner.*未知字段.*max_iteration"):
-                load_planning_profile(profile_path, project_root=project_root)
+                load_planning_profile(
+                    write_profile_pair(project_root, planning_data=data),
+                    project_root=project_root,
+                )
 
     def test_rejects_unsupported_profile_schema(self):
+        data = valid_planning_payload()
+        data["schema"] = "planning_profile_v1"
+
         with tempfile.TemporaryDirectory() as directory:
             project_root = Path(directory)
-            profile_data = valid_profile_payload()
-            profile_data["schema"] = "planning_profile_v0"
-            profile_path = project_root / "planning.json"
-            profile_path.write_text(json.dumps(profile_data), encoding="utf-8")
-
-            with self.assertRaisesRegex(ValueError, "schema.*planning_profile_v1"):
-                load_planning_profile(profile_path, project_root=project_root)
-
-    def test_rejects_invalid_obstacle_bounds(self):
-        invalid_bounds = (
-            [-1.0, 1.0, 0.5, 0.5, -1.0, 1.0],
-            [-1.0, True, 0.0, 1.0, -1.0, 1.0],
-        )
-        for bounds in invalid_bounds:
-            with self.subTest(bounds=bounds), tempfile.TemporaryDirectory() as directory:
-                project_root = Path(directory)
-                profile_data = valid_profile_payload()
-                profile_data["obstacle_adapter"]["bounds"] = bounds
-                profile_path = project_root / "planning.json"
-                profile_path.write_text(json.dumps(profile_data), encoding="utf-8")
-
-                with self.assertRaisesRegex(ValueError, "obstacle_adapter.bounds"):
-                    load_planning_profile(profile_path, project_root=project_root)
+            with self.assertRaisesRegex(ValueError, "schema.*planning_profile_v2"):
+                load_planning_profile(
+                    write_profile_pair(project_root, planning_data=data),
+                    project_root=project_root,
+                )
 
     def test_rejects_invalid_numeric_settings(self):
         invalid_cases = (
@@ -120,33 +151,62 @@ class PlanningProfileTest(unittest.TestCase):
         )
         for field_path, invalid_value, expected_error in invalid_cases:
             with self.subTest(field=expected_error), tempfile.TemporaryDirectory() as directory:
+                data = valid_planning_payload()
+                data[field_path[0]][field_path[1]] = invalid_value
                 project_root = Path(directory)
-                profile_data = valid_profile_payload()
-                profile_data[field_path[0]][field_path[1]] = invalid_value
-                profile_path = project_root / "planning.json"
-                profile_path.write_text(json.dumps(profile_data), encoding="utf-8")
-
                 with self.assertRaisesRegex(ValueError, expected_error):
-                    load_planning_profile(profile_path, project_root=project_root)
+                    load_planning_profile(
+                        write_profile_pair(project_root, planning_data=data),
+                        project_root=project_root,
+                    )
 
-    def test_rejects_wrong_frame_or_task_mapping(self):
-        invalid_cases = (
-            (("expected_frame",), "fake_base", "expected_frame"),
-            (("task_mode_by_target_kind", "dig"), "CarryMaterial", "task_mode_by_target_kind"),
-        )
-        for field_path, invalid_value, expected_error in invalid_cases:
-            with self.subTest(field=field_path), tempfile.TemporaryDirectory() as directory:
-                project_root = Path(directory)
-                profile_data = valid_profile_payload()
-                if len(field_path) == 1:
-                    profile_data[field_path[0]] = invalid_value
-                else:
-                    profile_data[field_path[0]][field_path[1]] = invalid_value
-                profile_path = project_root / "planning.json"
-                profile_path.write_text(json.dumps(profile_data), encoding="utf-8")
+    def test_rejects_wrong_task_mapping(self):
+        data = valid_planning_payload()
+        data["task_mode_by_target_kind"]["dig"] = "CarryMaterial"
 
-                with self.assertRaisesRegex(ValueError, expected_error):
-                    load_planning_profile(profile_path, project_root=project_root)
+        with tempfile.TemporaryDirectory() as directory:
+            project_root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "task_mode_by_target_kind"):
+                load_planning_profile(
+                    write_profile_pair(project_root, planning_data=data),
+                    project_root=project_root,
+                )
+
+    def test_rejects_live_input_path_collisions(self):
+        perception = valid_perception_payload()
+        perception["outputs"]["live_bucket_tip"] = perception["outputs"]["live_local_map"]
+
+        with tempfile.TemporaryDirectory() as directory:
+            project_root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "live输入路径必须互不相同"):
+                load_planning_profile(
+                    write_profile_pair(project_root, perception_data=perception),
+                    project_root=project_root,
+                )
+
+    def test_rejects_live_inputs_in_different_directories(self):
+        perception = valid_perception_payload()
+        perception["outputs"]["live_bucket_tip"] = "runtime/other/bucket_tip.json"
+
+        with tempfile.TemporaryDirectory() as directory:
+            project_root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "同一输出目录"):
+                load_planning_profile(
+                    write_profile_pair(project_root, perception_data=perception),
+                    project_root=project_root,
+                )
+
+    def test_rejects_live_input_that_uses_planning_artifact_name(self):
+        perception = valid_perception_payload()
+        perception["outputs"]["live_local_map"] = "runtime/live/local_map.octomap_obstacles.json"
+
+        with tempfile.TemporaryDirectory() as directory:
+            project_root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "规划产物路径冲突"):
+                load_planning_profile(
+                    write_profile_pair(project_root, perception_data=perception),
+                    project_root=project_root,
+                )
 
 
 if __name__ == "__main__":

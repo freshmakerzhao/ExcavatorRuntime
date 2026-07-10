@@ -9,10 +9,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
 
+from .perception_profile import load_perception_profile
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PLANNING_PROFILE = PROJECT_ROOT / "localmap" / "config" / "planning.json"
-PLANNING_PROFILE_SCHEMA = "planning_profile_v1"
+PLANNING_PROFILE_SCHEMA = "planning_profile_v2"
 
 
 class PlanningProfileError(ValueError):
@@ -21,6 +23,7 @@ class PlanningProfileError(ValueError):
 
 @dataclass(frozen=True)
 class PlanningInputs:
+    perception_profile: Path
     live_local_map: Path
     live_bucket_tip: Path
     octomap_topic: str
@@ -88,25 +91,6 @@ def _validate_fields(section: str, data: object, expected: set[str]) -> None:
         raise PlanningProfileError(f"{section} 包含未知字段: {', '.join(sorted(unknown))}")
 
 
-def _validate_bounds(
-    name: str,
-    value: object,
-) -> tuple[float, float, float, float, float, float]:
-    if not isinstance(value, list) or len(value) != 6:
-        raise PlanningProfileError(f"{name} 必须包含6个数值")
-    if any(
-        isinstance(item, bool)
-        or not isinstance(item, int | float)
-        or not math.isfinite(item)
-        for item in value
-    ):
-        raise PlanningProfileError(f"{name} 必须包含6个有限数值")
-    bounds = tuple(float(item) for item in value)
-    if any(bounds[index + 1] <= bounds[index] for index in (0, 2, 4)):
-        raise PlanningProfileError(f"{name} 每个最大值必须大于最小值")
-    return bounds
-
-
 def _require_int(name: str, value: object, minimum: int, maximum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
         raise PlanningProfileError(f"{name} 必须是 {minimum}..{maximum} 的整数，实际为 {value!r}")
@@ -143,9 +127,7 @@ def load_planning_profile(
         {
             "schema",
             "profile_id",
-            "expected_frame",
             "inputs",
-            "output_dir",
             "freshness",
             "obstacle_adapter",
             "planner",
@@ -160,9 +142,7 @@ def load_planning_profile(
         "inputs",
         data["inputs"],
         {
-            "live_local_map",
-            "live_bucket_tip",
-            "octomap_topic",
+            "perception_profile",
             "machine_profile",
             "reachable_workspace",
         },
@@ -175,13 +155,12 @@ def load_planning_profile(
     _validate_fields(
         "obstacle_adapter",
         data["obstacle_adapter"],
-        {"bounds", "box_size_m", "max_obstacles"},
+        {"box_size_m", "max_obstacles"},
     )
     _validate_fields(
         "planner",
         data["planner"],
         {
-            "bounds",
             "collision_radius_m",
             "step_size_m",
             "edge_check_step_m",
@@ -216,10 +195,6 @@ def load_planning_profile(
     _require_int("planner.waypoint_count", planner["waypoint_count"], 1, 1000)
     _require_int("planner.seed", planner["seed"], 0, 4294967295)
     _require_string("profile_id", data["profile_id"])
-    if data["expected_frame"] != "machine_root":
-        raise PlanningProfileError(
-            f"expected_frame 必须是 'machine_root'，实际为 {data['expected_frame']!r}"
-        )
     task_modes = data["task_mode_by_target_kind"]
     expected_task_modes = {"dig": "MoveToDig", "dump": "CarryMaterial"}
     if task_modes != expected_task_modes:
@@ -233,38 +208,67 @@ def load_planning_profile(
         return candidate if candidate.is_absolute() else project_root / candidate
 
     inputs = data["inputs"]
-    _require_string("inputs.octomap_topic", inputs["octomap_topic"])
-    if not inputs["octomap_topic"].startswith("/"):
-        raise PlanningProfileError("inputs.octomap_topic 必须是绝对ROS topic")
-    output_dir = resolve("output_dir", data["output_dir"])
+    perception_profile_path = resolve(
+        "inputs.perception_profile",
+        inputs["perception_profile"],
+    )
+    perception = load_perception_profile(
+        perception_profile_path,
+        project_root=project_root,
+    )
+    output_dir = perception.outputs.live_local_map.parent
+    if perception.outputs.live_bucket_tip.parent != output_dir:
+        raise PlanningProfileError(
+            "perception live_local_map与live_bucket_tip必须位于同一输出目录"
+        )
+    planning_outputs = PlanningOutputs(
+        directory=output_dir,
+        local_map=output_dir / "local_map.octomap_obstacles.json",
+        request=output_dir / "rrt_star_request.octomap_obstacles.json",
+        trajectory=output_dir / "trajectory_command.simple_rrt.json",
+        observation_slice=output_dir / "observation_waypoint_slice.simple_rrt.json",
+    )
+    live_paths = {
+        perception.outputs.live_local_map,
+        perception.outputs.live_bucket_tip,
+    }
+    if len(live_paths) != 2:
+        raise PlanningProfileError("perception live输入路径必须互不相同")
+    artifact_paths = {
+        planning_outputs.local_map,
+        planning_outputs.request,
+        planning_outputs.trajectory,
+        planning_outputs.observation_slice,
+    }
+    if len(artifact_paths) != 4:
+        raise PlanningProfileError("规划产物路径必须互不相同")
+    collisions = live_paths & artifact_paths
+    if collisions:
+        names = ", ".join(str(path) for path in sorted(collisions))
+        raise PlanningProfileError(f"live输入与规划产物路径冲突: {names}")
     return PlanningProfile(
         profile_id=data["profile_id"],
-        expected_frame=data["expected_frame"],
+        expected_frame=perception.expected_frame,
         inputs=PlanningInputs(
-            live_local_map=resolve("inputs.live_local_map", inputs["live_local_map"]),
-            live_bucket_tip=resolve("inputs.live_bucket_tip", inputs["live_bucket_tip"]),
-            octomap_topic=inputs["octomap_topic"],
+            perception_profile=perception_profile_path,
+            live_local_map=perception.outputs.live_local_map,
+            live_bucket_tip=perception.outputs.live_bucket_tip,
+            octomap_topic=perception.topics.octomap_cells,
             machine_profile=resolve("inputs.machine_profile", inputs["machine_profile"]),
             reachable_workspace=resolve(
                 "inputs.reachable_workspace",
                 inputs["reachable_workspace"],
             ),
         ),
-        outputs=PlanningOutputs(
-            directory=output_dir,
-            local_map=output_dir / "local_map.octomap_obstacles.json",
-            request=output_dir / "rrt_star_request.octomap_obstacles.json",
-            trajectory=output_dir / "trajectory_command.simple_rrt.json",
-            observation_slice=output_dir / "observation_waypoint_slice.simple_rrt.json",
-        ),
+        outputs=planning_outputs,
         freshness=FreshnessSettings(**freshness),
         obstacle_adapter=ObstacleAdapterSettings(
-            bounds=_validate_bounds("obstacle_adapter.bounds", obstacle_adapter["bounds"]),
+            bounds=perception.octomap.crop_bounds,
             box_size_m=obstacle_adapter["box_size_m"],
             max_obstacles=obstacle_adapter["max_obstacles"],
         ),
         planner=PlannerSettings(
-            bounds=_validate_bounds("planner.bounds", planner["bounds"]),
+            bounds=perception.local_map.bounds,
             collision_radius_m=planner["collision_radius_m"],
             step_size_m=planner["step_size_m"],
             edge_check_step_m=planner["edge_check_step_m"],
