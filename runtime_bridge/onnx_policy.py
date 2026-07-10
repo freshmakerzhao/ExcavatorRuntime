@@ -15,6 +15,7 @@ class OnnxPolicyLoadError(RuntimeError):
 class OnnxPolicy:
     """最小 ONNX Runtime 推理封装，适配 ML-Agents 导出的连续动作模型。"""
 
+    OBSERVATION_INPUT = "obs_0"
     DETERMINISTIC_ACTION_OUTPUT = "deterministic_continuous_actions"
 
     def __init__(self, model_path: Path, providers: Sequence[str] | None = None) -> None:
@@ -56,23 +57,31 @@ class OnnxPolicy:
         return self._extract_action(outputs)
 
     def _find_observation_input(self) -> Any:
-        """寻找承载38维向量观测的 ONNX input。"""
-        float_inputs = [info for info in self.input_infos if "float" in str(info.type)]
-        for info in float_inputs:
-            if any(dim == 38 for dim in info.shape):
+        """选择并验证部署契约要求的38维 float observation 输入。"""
+        for info in self.input_infos:
+            if info.name != self.OBSERVATION_INPUT:
+                continue
+            shape = list(info.shape or [])
+            if str(info.type) == "tensor(float)" and len(shape) == 2 and shape[-1] == 38:
                 return info
-        for info in float_inputs:
-            if "obs" in info.name.lower() or "observation" in info.name.lower():
-                return info
-        if float_inputs:
-            return float_inputs[0]
-        raise OnnxPolicyLoadError("ONNX模型没有可用的float observation输入")
+            raise OnnxPolicyLoadError(
+                f"ONNX输入 {self.OBSERVATION_INPUT} 签名不匹配: "
+                f"type={info.type}, shape={shape}; 期望 tensor(float) [batch, 38]"
+            )
+        raise OnnxPolicyLoadError(f"ONNX模型缺少输入: {self.OBSERVATION_INPUT}")
 
     def _find_action_output(self) -> Any:
-        """按精确名称选择部署使用的确定性连续动作输出。"""
+        """选择并验证部署使用的4维确定性连续动作输出。"""
         for info in self.output_infos:
-            if info.name == self.DETERMINISTIC_ACTION_OUTPUT:
+            if info.name != self.DETERMINISTIC_ACTION_OUTPUT:
+                continue
+            shape = list(info.shape or [])
+            if str(info.type) == "tensor(float)" and len(shape) == 2 and shape[-1] == 4:
                 return info
+            raise OnnxPolicyLoadError(
+                f"ONNX输出 {self.DETERMINISTIC_ACTION_OUTPUT} 签名不匹配: "
+                f"type={info.type}, shape={shape}; 期望 tensor(float) [batch, 4]"
+            )
         raise OnnxPolicyLoadError(
             f"ONNX模型缺少确定性动作输出: {self.DETERMINISTIC_ACTION_OUTPUT}"
         )

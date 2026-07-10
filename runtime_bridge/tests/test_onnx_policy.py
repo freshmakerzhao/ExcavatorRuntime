@@ -60,6 +60,34 @@ class _NonFiniteOutputSession(_PolicySession):
         return [np.array([[0.25, np.nan, 0.75, -1.0]], dtype=np.float32)]
 
 
+class _WrongObservationNameSession(_PolicySession):
+    def __init__(self, model_path, providers):
+        super().__init__(model_path, providers)
+        self.inputs = [_TensorInfo("legacy_observation", ["batch", 38])]
+
+
+class _WrongObservationShapeSession(_PolicySession):
+    def __init__(self, model_path, providers):
+        super().__init__(model_path, providers)
+        self.inputs = [_TensorInfo("obs_0", ["batch", 37])]
+
+
+class _WrongActionTypeSession(_PolicySession):
+    def __init__(self, model_path, providers):
+        super().__init__(model_path, providers)
+        self.outputs[-1] = _TensorInfo(
+            "deterministic_continuous_actions",
+            ["batch", 4],
+            tensor_type="tensor(int64)",
+        )
+
+
+class _WrongActionShapeSession(_PolicySession):
+    def __init__(self, model_path, providers):
+        super().__init__(model_path, providers)
+        self.outputs[-1] = _TensorInfo("deterministic_continuous_actions", ["batch", 5])
+
+
 class OnnxPolicyTest(unittest.TestCase):
     @staticmethod
     def _make_policy(session_type=_PolicySession):
@@ -92,6 +120,18 @@ class OnnxPolicyTest(unittest.TestCase):
 
         with self.assertRaisesRegex(OnnxPolicyLoadError, "非有限"):
             policy.run([0.0] * 38)
+
+    def test_rejects_wrong_observation_signature(self):
+        for session_type in (_WrongObservationNameSession, _WrongObservationShapeSession):
+            with self.subTest(session_type=session_type.__name__):
+                with self.assertRaisesRegex(OnnxPolicyLoadError, "obs_0"):
+                    self._make_policy(session_type)
+
+    def test_rejects_wrong_action_signature(self):
+        for session_type in (_WrongActionTypeSession, _WrongActionShapeSession):
+            with self.subTest(session_type=session_type.__name__):
+                with self.assertRaisesRegex(OnnxPolicyLoadError, "deterministic_continuous_actions"):
+                    self._make_policy(session_type)
 
 
 if __name__ == "__main__":
