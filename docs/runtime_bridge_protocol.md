@@ -87,7 +87,7 @@ PC -> Orin action: 18082/udp
 
 注意：
 
-- 第一版 `pc_runtime_bridge.py --send-zero-action` 只发零动作，用于联调链路。
+- `pc_runtime_bridge.py --reply-zero` 只发零动作，用于联调链路；默认只接收状态。
 - 为兼容 Orin 端解析，`action_type` 字段必须保持 `normalized_velocity_command`。
 - `pc_policy_bridge.py` 内部 ONNX 输出仍是 `[-1, 1]` 策略动作，但 UDP 发给 Orin 前会按 `shared/machine_profile.json` 反归一化为执行器物理速度。
 - 当前 `action` 顺序是 `boom, stick, bucket, swing`；前三个单位 m/s，`swing` 单位 rad/s。这里字段名沿用旧协议，数值语义以本条为准。
@@ -100,23 +100,17 @@ PC -> Orin action: 18082/udp
 终端 1，启动 PC 侧：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 python3 runtime_bridge/apps/pc_runtime_bridge.py \
-  --state-bind-host 127.0.0.1 \
-  --orin-host 127.0.0.1 \
-  --send-zero-action \
-  --print-every 10 \
-  --write-every 10
+  --config runtime_bridge/config/runtime.mock.json \
+  --reply-zero
 ```
 
 终端 2，启动 mock Orin：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
-python3 runtime_bridge/apps/mock_orin_relay.py \
-  --pc-host 127.0.0.1 \
-  --rate-hz 10 \
-  --print-every 10
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+python3 runtime_bridge/apps/mock_orin_relay.py
 ```
 
 如果要让 PC 侧把状态发布成 ROS2 `/joint_states`：
@@ -126,9 +120,8 @@ source /opt/ros/jazzy/setup.zsh
 source ros2_ws/install/setup.zsh
 
 python3 runtime_bridge/apps/pc_runtime_bridge.py \
-  --state-bind-host 127.0.0.1 \
-  --orin-host 127.0.0.1 \
-  --send-zero-action \
+  --config runtime_bridge/config/runtime.mock.json \
+  --reply-zero \
   --publish-joint-states
 ```
 
@@ -137,15 +130,8 @@ python3 runtime_bridge/apps/pc_runtime_bridge.py \
 PC 侧：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
-python3 runtime_bridge/apps/pc_runtime_bridge.py \
-  --state-bind-host 0.0.0.0 \
-  --state-port 18081 \
-  --orin-host 192.168.2.88 \
-  --action-port 18082 \
-  --send-zero-action \
-  --print-every 10 \
-  --write-every 10
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+python3 runtime_bridge/apps/pc_runtime_bridge.py --reply-zero
 ```
 
-这条命令会监听 Orin 的 `machine_state_v1`，写出 `runtime_bridge/exports/latest_state.json`，并回发零动作。零动作只用于通信联调。
+这条命令会按 `runtime_bridge/config/runtime.json` 监听 Orin 的 `machine_state_v1`，写出 `runtime_bridge/exports/latest_state.json`，并回发零动作。零动作只用于通信联调。

@@ -22,23 +22,17 @@ from runtime_bridge.protocol import (
     encode_packet,
     make_zero_action,
 )
+from runtime_bridge.runtime_config import DEFAULT_RUNTIME_CONFIG, load_runtime_config
 
 
 DEFAULT_LATEST_STATE = PROJECT_ROOT / "runtime_bridge" / "exports" / "latest_state.json"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """构造 PC runtime bridge 参数。"""
-    parser = argparse.ArgumentParser(description="接收Orin状态包并回发PC动作包。")
-    parser.add_argument("--state-bind-host", default="0.0.0.0", help="监听Orin状态的本地地址")
-    parser.add_argument("--state-port", type=int, default=18081, help="Orin -> PC 状态UDP端口")
-    parser.add_argument("--orin-host", default="127.0.0.1", help="动作包发送到的Orin地址")
-    parser.add_argument("--action-port", type=int, default=18082, help="PC -> Orin 动作UDP端口")
-    parser.add_argument("--send-zero-action", action="store_true", help="每收到状态后回发四维零动作；仅用于链路联调")
-    parser.add_argument("--action-valid-ms", type=int, default=100, help="动作有效期，Orin侧应据此做超时保护")
-    parser.add_argument("--latest-state-json", type=Path, default=DEFAULT_LATEST_STATE, help="写出最近一次状态包")
-    parser.add_argument("--write-every", type=int, default=10, help="每收到多少个状态写一次JSON")
-    parser.add_argument("--print-every", type=int, default=20, help="每收到多少个状态打印一次；0表示不打印")
+    """构造通信诊断入口参数。"""
+    parser = argparse.ArgumentParser(description="接收Orin状态包，可选回发零动作进行链路诊断。")
+    parser.add_argument("--config", type=Path, default=DEFAULT_RUNTIME_CONFIG, help="运行配置JSON")
+    parser.add_argument("--reply-zero", action="store_true", help="每收到状态后回发四维零动作")
     parser.add_argument("--publish-joint-states", action="store_true", help="把状态包关节角发布为ROS2 /joint_states")
     return parser
 
@@ -97,20 +91,26 @@ def write_latest_state(path: Path, state: ExcavatorStatePacket | MachineStatePac
 
 
 def main() -> int:
-    """入口：接收状态包，按配置写JSON、发JointState和回传动作。"""
+    """诊断入口：接收状态包，按需写JSON、发JointState和回传零动作。"""
     args = build_arg_parser().parse_args()
+    try:
+        config = load_runtime_config(args.config)
+    except (OSError, ValueError) as exc:
+        print(f"runtime diagnostic configuration error: {exc}", file=sys.stderr, flush=True)
+        return 2
+
     recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    recv_sock.bind((args.state_bind_host, args.state_port))
+    recv_sock.bind(config.network.state_endpoint)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    action_destination = (args.orin_host, args.action_port)
+    action_destination = config.network.action_endpoint
     joint_state_publisher = JointStatePublisher() if args.publish_joint_states else None
 
     state_count = 0
     action_seq = 0
     print(
-        "pc runtime bridge started: "
-        f"state <- {args.state_bind_host}:{args.state_port}, action -> {action_destination}, "
-        f"zero_action={args.send_zero_action}, publish_joint_states={args.publish_joint_states}",
+        "pc runtime diagnostic started: "
+        f"state <- {config.network.state_endpoint}, action -> {action_destination}, "
+        f"reply_zero={args.reply_zero}, publish_joint_states={args.publish_joint_states}",
         flush=True,
     )
 
@@ -126,17 +126,17 @@ def main() -> int:
                 continue
 
             state_count += 1
-            if args.write_every > 0 and state_count % args.write_every == 0:
-                write_latest_state(args.latest_state_json, packet)
+            if config.diagnostics.write_every > 0 and state_count % config.diagnostics.write_every == 0:
+                write_latest_state(DEFAULT_LATEST_STATE, packet)
             if joint_state_publisher is not None:
                 joint_state_publisher.publish(packet)
-            if args.send_zero_action:
+            if args.reply_zero:
                 # 关键：零动作只用于链路联调，不代表最终 ONNX 输出。
-                action = make_zero_action(action_seq, valid_for_ms=args.action_valid_ms)
+                action = make_zero_action(action_seq, valid_for_ms=config.network.action_valid_ms)
                 send_sock.sendto(encode_packet(action), action_destination)
                 action_seq += 1
 
-            if args.print_every > 0 and state_count % args.print_every == 0:
+            if config.diagnostics.print_every > 0 and state_count % config.diagnostics.print_every == 0:
                 age_ms = int(time.time() * 1000) - packet.stamp_ms
                 if isinstance(packet, MachineStatePacket):
                     # 关键：正式协议下把安全状态也打出来，方便联调时一眼看出为何不执行动作。

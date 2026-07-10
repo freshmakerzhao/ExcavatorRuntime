@@ -269,26 +269,20 @@ python3 localmap/apps/diagnostics/run_smoke_check.py --skip-ros
 
 ## 7. 可选：本机模拟 Orin 中转
 
-终端 1，启动 PC runtime bridge：
+终端 1，启动 PC 通信诊断入口：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 python3 runtime_bridge/apps/pc_runtime_bridge.py \
-  --state-bind-host 127.0.0.1 \
-  --orin-host 127.0.0.1 \
-  --send-zero-action \
-  --print-every 10 \
-  --write-every 10
+  --config runtime_bridge/config/runtime.mock.json \
+  --reply-zero
 ```
 
 终端 2，启动 mock Orin relay：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
-python3 runtime_bridge/apps/mock_orin_relay.py \
-  --pc-host 127.0.0.1 \
-  --rate-hz 10 \
-  --print-every 10
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+python3 runtime_bridge/apps/mock_orin_relay.py
 ```
 
 如果要把 Orin 状态发布成 ROS2 `/joint_states`，PC 侧加：
@@ -300,18 +294,11 @@ python3 runtime_bridge/apps/mock_orin_relay.py \
 连接真实 Orin 时，PC 侧使用：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
-python3 runtime_bridge/apps/pc_runtime_bridge.py \
-  --state-bind-host 0.0.0.0 \
-  --state-port 18081 \
-  --orin-host 192.168.2.88 \
-  --action-port 18082 \
-  --send-zero-action \
-  --print-every 10 \
-  --write-every 10
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+python3 runtime_bridge/apps/pc_runtime_bridge.py --reply-zero
 ```
 
-这一步只回发零动作，用于验证 Orin -> PC 状态包和 PC -> Orin 动作包通道。
+这一步只回发零动作，用于验证 Orin -> PC 状态包和 PC -> Orin 动作包通道。网络、动作有效期和日志采样均读取运行配置；不加 `--reply-zero` 时只接收和记录状态。
 
 启动 ONNX policy bridge：
 
