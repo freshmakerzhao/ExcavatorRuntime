@@ -42,6 +42,8 @@ class OnnxPolicy:
         obs = np.asarray(list(observation), dtype=np.float32)
         if obs.shape != (38,):
             raise ValueError(f"ONNX observation 必须是38维，实际为 {obs.shape}")
+        if not np.all(np.isfinite(obs)):
+            raise ValueError("ONNX observation 包含非有限值")
 
         feed: dict[str, Any] = {}
         for input_info in self.input_infos:
@@ -117,5 +119,7 @@ class OnnxPolicy:
             raise OnnxPolicyLoadError("ONNX输出中找不到4维动作")
 
         action = candidates[0].astype(np.float32).reshape(-1)[:4]
+        if not np.all(np.isfinite(action)):
+            raise OnnxPolicyLoadError("ONNX动作输出包含非有限值")
         action = np.clip(action, -1.0, 1.0)
         return [float(value) for value in action]
