@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -43,7 +44,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trajectory-json", type=Path, help="TrajectoryCommand JSON路径")
     parser.add_argument("--bucket-tip-json", type=Path, help="bucket tip live JSON路径")
     parser.add_argument("--skip-ros", action="store_true", help="跳过ROS topic检查，只检查JSON文件")
-    parser.add_argument("--run-planning", action="store_true", help="先运行一次run_planning_once.sh，再检查轨迹文件")
+    parser.add_argument(
+        "--run-planning",
+        metavar="TARGET_ID",
+        help="对指定LocalMap目标运行一次规划，再检查轨迹文件",
+    )
     parser.add_argument("--require-trajectory", action="store_true", help="缺少轨迹文件时判定为失败；默认只警告")
     parser.add_argument("--topic-timeout-s", type=float, default=5.0, help="topic hz采样超时时间")
     parser.add_argument("--min-point-rate-hz", type=float, default=1.0, help="点云topic最低期望频率")
@@ -81,17 +86,25 @@ def check_local_map_json(path: Path, expected_frame: str) -> CheckResult:
 
 
 def check_bucket_tip_json(path: Path, expected_frame: str) -> CheckResult:
-    """检查bucket tip live JSON；不存在时只警告，因为可回退到 measured placeholder。"""
+    """检查规划必需的live bucket tip JSON。"""
     data, error = load_json_file(path)
     if error is not None or data is None:
-        return CheckResult("Bucket tip JSON", "warn", error or "未知读取错误")
+        return CheckResult("Bucket tip JSON", "fail", error or "未知读取错误")
 
     frame_id = data.get("frame_id")
     position = data.get("position_m")
     if frame_id != expected_frame:
         return CheckResult("Bucket tip JSON", "fail", f"frame_id={frame_id}，期望 {expected_frame}")
+    if data.get("status") != "live_from_tf":
+        return CheckResult(
+            "Bucket tip JSON",
+            "fail",
+            f"status={data.get('status')!r}，期望 'live_from_tf'",
+        )
     if not is_xyz_vector(position):
-        return CheckResult("Bucket tip JSON", "fail", "position_m 不是长度为3的数值数组")
+        return CheckResult("Bucket tip JSON", "fail", "position_m 不是3个有限数值")
+    if not is_finite_number(data.get("stamp_s")):
+        return CheckResult("Bucket tip JSON", "fail", "stamp_s 不是有限数值")
     return CheckResult("Bucket tip JSON", "pass", f"frame={frame_id}, position_m={format_xyz(position)}")
 
 
@@ -114,8 +127,13 @@ def check_trajectory_json(path: Path, expected_frame: str, required: bool) -> Ch
 
 
 def is_xyz_vector(value: object) -> bool:
-    """判断值是否是长度为3的数值数组。"""
-    return isinstance(value, list) and len(value) == 3 and all(isinstance(item, int | float) for item in value)
+    """判断值是否是由3个有限数值组成的数组。"""
+    return isinstance(value, list) and len(value) == 3 and all(is_finite_number(item) for item in value)
+
+
+def is_finite_number(value: object) -> bool:
+    """bool不是传感器数值；NaN/Inf也不能进入健康输入。"""
+    return not isinstance(value, bool) and isinstance(value, int | float) and math.isfinite(value)
 
 
 def format_xyz(value: list[float]) -> str:
@@ -175,12 +193,12 @@ def check_topic_rate(topic: str, timeout_s: float, min_rate_hz: float) -> CheckR
     return CheckResult(f"Rate {topic}", "pass", f"{rate:.2f} Hz")
 
 
-def run_planning_once() -> CheckResult:
+def run_planning_once(target_id: str) -> CheckResult:
     """运行一次规划脚本；用于需要端到端验证时显式打开。"""
     script = PROJECT_ROOT / "localmap" / "scripts" / "run_planning_once.sh"
     env = os.environ.copy()
     try:
-        process = run_process([str(script)], timeout_s=60.0, env=env)
+        process = run_process([str(script), target_id], timeout_s=60.0, env=env)
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         return CheckResult("Run planning once", "fail", f"规划脚本执行失败: {exc}")
     if process.returncode != 0:
@@ -217,10 +235,11 @@ def build_checks(args: argparse.Namespace) -> list[CheckResult]:
     results.append(check_local_map_json(local_map_json, args.expected_frame))
     results.append(check_bucket_tip_json(bucket_tip_json, args.expected_frame))
 
-    if args.run_planning:
-        results.append(run_planning_once())
-        args.require_trajectory = True
-    results.append(check_trajectory_json(trajectory_json, args.expected_frame, required=args.require_trajectory))
+    require_trajectory = args.require_trajectory
+    if args.run_planning is not None:
+        results.append(run_planning_once(args.run_planning))
+        require_trajectory = True
+    results.append(check_trajectory_json(trajectory_json, args.expected_frame, required=require_trajectory))
     return results
 
 

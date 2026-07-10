@@ -166,4 +166,6 @@ python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
   --output-json localmap/exports/live_latest/bucket_tip.machine_root.live.json
 ```
 
-`run_planning_once.sh` 会优先读取 `localmap/exports/live_latest/bucket_tip.machine_root.live.json`。如果该文件不存在，则回退到 `localmap/config/bucket_tip.machine_root.measured.json`。
+`run_planning_once.sh <target_id>` 只读取
+`localmap/exports/live_latest/bucket_tip.machine_root.live.json`。文件缺失、不是
+`live_from_tf`、坐标非有限数值或数据过期时，规划会安全失败，不会回退到 measured placeholder。

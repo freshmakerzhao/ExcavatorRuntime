@@ -123,16 +123,16 @@ ros2 topic hz /occupied_cells_vis_array
 python3 -m json.tool localmap/exports/live_latest/local_map.live.json | sed -n '1,60p'
 ```
 
-一键健康检查：
+基础链路与产物结构检查：
 
 ```bash
 localmap/scripts/run_smoke_check.sh
 ```
 
-如果希望检查前自动跑一次规划：
+如果还要按 `planning.json` 的时效规则验证当前输入确实可规划：
 
 ```bash
-localmap/scripts/run_smoke_check.sh --run-planning
+localmap/scripts/run_smoke_check.sh --run-planning mock_dig_001
 ```
 
 ## 4. 打开 RViz
@@ -227,22 +227,24 @@ python3 -m json.tool localmap/exports/live_latest/bucket_tip.machine_root.live.j
 感知栈运行后，在新终端执行一次规划：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
+cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 source /opt/ros/jazzy/setup.zsh
 source ros2_ws/install/setup.zsh
 
-PLANNING_BOUNDS="-1.5 3.0 -0.70 1.00 -0.5 4.0" \
-OBSTACLE_EXPORT_BOUNDS="-1.5 3.0 -0.42 1.00 -0.5 4.0" \
-TASK_MODE=MoveToDig \
-TARGET_KIND=dig \
-TARGET_ID=mock_dig_001 \
-localmap/scripts/run_planning_once.sh
+localmap/scripts/run_planning_once.sh mock_dig_001
 ```
 
-默认 `mock_dig_001` 是右侧远端可达目标。如果要切到左侧远端目标：
+目标类型和任务模式由 `target_id` 在当前 LocalMap 中的位置自动推导。稳定的算法参数统一保存在
+`localmap/config/planning.json`，现场运行不再通过环境变量逐项覆盖。如果要切到左侧远端目标：
 
 ```bash
-TARGET_ID=mock_dig_left_far localmap/scripts/run_planning_once.sh
+localmap/scripts/run_planning_once.sh mock_dig_left_far
+```
+
+只验证 live 输入和展示内部步骤、不发布规划产物：
+
+```bash
+localmap/scripts/run_planning_once.sh mock_dig_001 --dry-run
 ```
 
 输出：

@@ -35,7 +35,7 @@
 - `scripts/generate_simple_rrt_trajectory_from_request.py`：兼容入口，从 RRT* 请求生成第一版 bucket-tip 简单避障轨迹，默认受 `shared/reachable_workspaces/scale_excavator_workspace.json` 约束
 - `scripts/generate_observation_waypoint_slice.py`：兼容入口，生成 38 维 observation 中 `idx 15..26` 的 waypoint 相关切片
 - `scripts/run_perception_stack.sh`：兼容入口，一键启动雷达驱动、实时坐标转换、实时LocalMap、OctoMap和可达区域marker，可选轨迹marker
-- `scripts/run_planning_once.sh`：兼容入口，从当前 OctoMap 一次性生成 LocalMap、RRT请求、轨迹和observation切片
+- `scripts/run_planning_once.sh`：ROS环境适配入口；只接收目标ID，从当前OctoMap一次性生成LocalMap、RRT请求、轨迹和observation切片
 - `scripts/run_smoke_check.sh`：兼容入口，一键检查当前感知/建图/规划链路是否健康
 - `config/extrinsics_rslidar_to_machine_root.measured.json`：当前实测 `rslidar -> machine_root` 外参
 - `config/targets.mock.json`：占位 dig/dump target，后续由任务配置或感知模块生成
@@ -110,17 +110,16 @@ python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
   --output-json localmap/exports/live_latest/bucket_tip.machine_root.live.json
 ```
 
-`localmap/scripts/run_planning_once.sh` 会优先读取 live JSON：
+`localmap/scripts/run_planning_once.sh <target_id>` 只读取实时输入：
 
 ```text
+localmap/exports/live_latest/local_map.live.json
 localmap/exports/live_latest/bucket_tip.machine_root.live.json
 ```
 
-如果 live JSON 不存在，则回退到：
-
-```text
-localmap/config/bucket_tip.machine_root.measured.json
-```
+任一输入缺失、坐标系不是 `machine_root`、来源不是 TF live bridge，或数据超过
+`localmap/config/planning.json` 中的时效阈值，规划都会失败且不会覆盖上一组完整产物。
+`bucket_tip.machine_root.measured.json` 仅供离线工具使用，不是真机规划的回退值。
 
 一键感知栈默认不启动 bucket tip bridge；如果 FK 节点已经在运行，可以打开：
 
