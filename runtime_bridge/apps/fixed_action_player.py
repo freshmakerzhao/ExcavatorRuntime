@@ -52,7 +52,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--step-timeout-s", type=float, default=3.0, help="每段固定动作最长时间")
     parser.add_argument("--hold-s", type=float, default=0.15, help="每段结束后的零动作保持时间")
     parser.add_argument("--send-when-control-disabled", action="store_true", help="忽略control_enabled安全门；仅台架确认安全时使用")
-    parser.add_argument("--dry-run", action="store_true", help="只打印，不发送UDP动作")
+    parser.add_argument(
+        "--enable-motion",
+        action="store_true",
+        help="显式允许向Orin发送UDP动作；默认只计算和打印",
+    )
     parser.add_argument(
         "--action-time-source",
         choices=("orin", "pc"),
@@ -104,7 +108,8 @@ def main() -> int:
 
     print(
         f"fixed action player started: action={args.action}, "
-        f"state <- {args.state_bind_host}:{args.state_port}, action -> {destination}, dry_run={args.dry_run}",
+        f"state <- {args.state_bind_host}:{args.state_port}, action -> {destination}, "
+        f"enable_motion={args.enable_motion}",
         flush=True,
     )
 
@@ -140,7 +145,7 @@ def main() -> int:
                 action_packet = make_zero_action(action_seq, args.action_valid_ms, stamp_ms=action_stamp_ms)
                 status = FixedActionStatus(f"safety_zero:{reason}", executor.step_index, "安全零动作", 0.0, executor.done)
 
-            if not args.dry_run:
+            if args.enable_motion:
                 send_sock.sendto(encode_packet(action_packet), destination)
 
             action_seq += 1

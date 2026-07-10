@@ -1,5 +1,6 @@
 import unittest
 
+from runtime_bridge.apps.fixed_action_player import build_arg_parser
 from runtime_bridge.fixed_actions import FixedActionExecutor, fixed_action_sequence, physical_velocity_action_from_normalized
 from runtime_bridge.protocol import MachineStatePacket, decode_packet, encode_packet
 
@@ -61,6 +62,12 @@ def sample_state(boom=0.0, stick=0.0, bucket=-0.1, control_enabled=True):
 
 
 class FixedActionTest(unittest.TestCase):
+    def test_fixed_action_player_requires_explicit_motion_enable(self):
+        parser = build_arg_parser()
+
+        self.assertFalse(parser.parse_args(["--action", "dig"]).enable_motion)
+        self.assertTrue(parser.parse_args(["--action", "dig", "--enable-motion"]).enable_motion)
+
     def test_denormalizes_action_to_physical_velocity(self):
         action = physical_velocity_action_from_normalized([1.0, -1.0, 0.5, -0.5], sample_profile())
 

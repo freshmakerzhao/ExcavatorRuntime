@@ -358,7 +358,9 @@ python3 runtime_bridge/apps/fixed_action_player.py \
   --print-every 1
 ```
 
-默认安全门同样开启；如果 Orin 仍发送 `control_enabled=false`，脚本只会发送零动作。台架确认 Orin 不会误执行时，才使用：
+上述固定动作命令默认只计算和打印，不发送 UDP 动作。完成单轴方向、限位、急停和现场安全检查后，必须显式增加 `--enable-motion` 才会向 Orin 发送动作。
+
+默认安全门同样开启；即使已显式启用动作，如果 Orin 仍发送 `control_enabled=false`，脚本也只会发送零动作。台架确认 Orin 不会误执行时，才使用：
 
 ```bash
 --send-when-control-disabled
