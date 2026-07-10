@@ -1,0 +1,24 @@
+{
+  "schema": "runtime_bridge_config_v1",
+  "network": {
+    "state_bind_host": "0.0.0.0",
+    "state_port": 18081,
+    "orin_host": "192.168.2.88",
+    "action_port": 18082,
+    "action_valid_ms": 100,
+    "action_time_source": "orin"
+  },
+  "artifacts": {
+    "onnx": "../RLExcavator/Assets/AIModels/ExcavatorTrajectory-7496592.onnx",
+    "machine_profile": "../shared/machine_profile.json",
+    "waypoint_slice": "localmap/exports/live_latest/observation_waypoint_slice.simple_rrt.json",
+    "latest_observation": "runtime_bridge/exports/latest_observation.json"
+  },
+  "policy": {
+    "bucket_tip_timeout_ms": 500
+  },
+  "diagnostics": {
+    "print_every": 1,
+    "write_every": 5
+  }
+}
