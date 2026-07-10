@@ -15,6 +15,8 @@ class OnnxPolicyLoadError(RuntimeError):
 class OnnxPolicy:
     """最小 ONNX Runtime 推理封装，适配 ML-Agents 导出的连续动作模型。"""
 
+    DETERMINISTIC_ACTION_OUTPUT = "deterministic_continuous_actions"
+
     def __init__(self, model_path: Path, providers: Sequence[str] | None = None) -> None:
         try:
             import onnxruntime as ort
@@ -33,6 +35,7 @@ class OnnxPolicy:
         self.input_infos = list(self.session.get_inputs())
         self.output_infos = list(self.session.get_outputs())
         self.observation_input = self._find_observation_input()
+        self.action_output = self._find_action_output()
 
     def run(self, observation: Sequence[float]) -> list[float]:
         """执行一次推理，返回 [boom, stick, bucket, swing]，范围 clamp 到 [-1,1]。"""
@@ -47,7 +50,7 @@ class OnnxPolicy:
             else:
                 feed[input_info.name] = self._zero_input(input_info)
 
-        outputs = self.session.run(None, feed)
+        outputs = self.session.run([self.action_output.name], feed)
         return self._extract_action(outputs)
 
     def _find_observation_input(self) -> Any:
@@ -62,6 +65,15 @@ class OnnxPolicy:
         if float_inputs:
             return float_inputs[0]
         raise OnnxPolicyLoadError("ONNX模型没有可用的float observation输入")
+
+    def _find_action_output(self) -> Any:
+        """按精确名称选择部署使用的确定性连续动作输出。"""
+        for info in self.output_infos:
+            if info.name == self.DETERMINISTIC_ACTION_OUTPUT:
+                return info
+        raise OnnxPolicyLoadError(
+            f"ONNX模型缺少确定性动作输出: {self.DETERMINISTIC_ACTION_OUTPUT}"
+        )
 
     @staticmethod
     def _reshape_observation(obs: np.ndarray, shape: Sequence[Any]) -> np.ndarray:
