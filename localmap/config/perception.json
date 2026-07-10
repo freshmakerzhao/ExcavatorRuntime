@@ -1,0 +1,35 @@
+{
+  "schema": "perception_profile_v1",
+  "profile_id": "scale_excavator_live_debug",
+  "expected_frame": "machine_root",
+  "inputs": {
+    "rslidar_config": "runtime/config_airy_current.yaml",
+    "extrinsics": "localmap/config/extrinsics_rslidar_to_machine_root.measured.json",
+    "targets": "localmap/config/targets.mock.json",
+    "bucket_tip_bridge": "localmap/config/bucket_tip_tf_bridge.machine_root.json"
+  },
+  "outputs": {
+    "live_local_map": "localmap/exports/live_latest/local_map.live.json",
+    "live_bucket_tip": "localmap/exports/live_latest/bucket_tip.machine_root.live.json",
+    "log_dir": "runtime/logs"
+  },
+  "topics": {
+    "raw_cloud": "/rslidar_points",
+    "machine_cloud": "/localmap/machine_root_points",
+    "octomap_cells": "/occupied_cells_vis_array",
+    "bucket_tip_fk": "/bucket_tip_pose_map",
+    "bucket_tip_machine_root": "/localmap/bucket_tip_machine_root_pose"
+  },
+  "local_map": {
+    "bounds": [-1.5, 3.0, -0.7, 1.0, -0.5, 4.0],
+    "write_every": 5,
+    "publish_every": 10
+  },
+  "octomap": {
+    "resolution_m": 0.05,
+    "max_range_m": 4.0,
+    "filter_ground_plane": false,
+    "reset_interval_s": 1.0,
+    "crop_bounds": [-1.5, 3.0, -0.42, 1.0, -0.5, 4.0]
+  }
+}

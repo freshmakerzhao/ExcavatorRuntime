@@ -38,6 +38,7 @@
 - `scripts/run_planning_once.sh`：ROS环境适配入口；只接收目标ID，从当前OctoMap一次性生成LocalMap、RRT请求、轨迹和observation切片
 - `scripts/run_smoke_check.sh`：兼容入口，一键检查当前感知/建图/规划链路是否健康
 - `config/extrinsics_rslidar_to_machine_root.measured.json`：当前实测 `rslidar -> machine_root` 外参
+- `config/perception.json`：待接入启动脚本的版本化感知配置；当前是live-debug基线，集中定义核心topic、输入输出、LocalMap和OctoMap参数
 - `config/targets.mock.json`：占位 dig/dump target，后续由任务配置或感知模块生成
 - `config/bucket_tip.machine_root.measured.json`：占位 bucket tip，真机运行时由状态估计/FK提供
 - `config/bucket_tip_tf_bridge.machine_root.json`：`base_link` bucket tip 到 `machine_root` bucket tip 的坐标桥接配置
