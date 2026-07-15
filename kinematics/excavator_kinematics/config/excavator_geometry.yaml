@@ -48,13 +48,13 @@ excavator_tf_node:
     angle_offsets:
       swing: 0.0
       boom: 0.52
-      arm: 0.0
-      bucket: 0.52
+      arm: 3.14
+      bucket: 3.66
 
     # Sensor/Orin angle sign to FK sign.
     # 当前实测：swing、boom、arm 的电位计正方向与FK正方向相反；bucket保持一致。
     joint_signs:
       swing: -1.0
       boom: -1.0
-      arm: 1.0
-      bucket: 1.0
+      arm: -1.0
+      bucket: -1.0

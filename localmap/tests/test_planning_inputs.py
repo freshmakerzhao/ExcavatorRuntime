@@ -98,6 +98,48 @@ class PlanningInputsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "bucket_tip.stamp_s.*过期"):
                 load_live_planning_inputs(profile, now_s=1000.0)
 
+    def test_accepts_live_local_map_written_one_cycle_ago(self):
+        """LocalMap按5帧落盘；正常调度抖动不能使一次规划随机失败。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            local_map_path = root / "local_map.json"
+            bucket_tip_path = root / "bucket_tip.json"
+            local_map_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "local_map.v1",
+                        # 真实失败样本：规划读取时LocalMap为529.6 ms旧。
+                        "timestamp_s": 999.4704,
+                        "frame_id": "machine_root",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            bucket_tip_path.write_text(
+                json.dumps(
+                    {
+                        "stamp_s": 999.9,
+                        "frame_id": "machine_root",
+                        "status": "live_from_tf",
+                        "position_m": [0.1, 0.2, 0.3],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            profile = load_planning_profile()
+            profile = replace(
+                profile,
+                inputs=replace(
+                    profile.inputs,
+                    live_local_map=local_map_path,
+                    live_bucket_tip=bucket_tip_path,
+                ),
+            )
+
+            snapshot = load_live_planning_inputs(profile, now_s=1000.0)
+
+        self.assertEqual(snapshot.local_map["timestamp_s"], 999.4704)
+
 
 if __name__ == "__main__":
     unittest.main()

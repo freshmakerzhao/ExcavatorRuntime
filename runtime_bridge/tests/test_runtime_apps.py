@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 
+from runtime_bridge.apps.inspect_orin_packets import extract_machine_state_packets, format_machine_state_packet
 from runtime_bridge.apps.pc_runtime_bridge import build_arg_parser
 from runtime_bridge.runtime_config import load_runtime_config
 
@@ -27,6 +28,23 @@ class RuntimeAppsTest(unittest.TestCase):
 
         self.assertEqual(config.network.state_endpoint, ("127.0.0.1", 18081))
         self.assertEqual(config.network.action_endpoint, ("127.0.0.1", 18082))
+
+    def test_packet_inspector_extracts_and_formats_machine_state_from_tcpdump_text(self):
+        capture = (
+            "14:00:01 IP 192.168.2.88.18081 > 192.168.2.127.18081: UDP, length 42\n"
+            '{"type":"machine_state_v1","schema_version":"1.0","seq":63,"stamp_ms":1783666906735,'
+            '"source":"orin","machine_id":"scale_excavator_v1","stm32_stamp_ms":850104,'
+            '"safety":{"estop":false,"stm32_alive":true,"sensor_valid":true,"control_enabled":true,"fault_flags":[]},'
+            '"actuator_state":{"boom":{"position_m":0.13103,"velocity_mps":0.0},"stick":{"position_m":0.15075,"velocity_mps":0.0},"bucket":{"position_m":0.05643,"velocity_mps":0.0},"swing":{"position_rad":0.2870717553680273,"velocity_rad_s":0.001780235837034216}},'
+            '"joint_state":{"position_rad":{"swing":0.2870717553680273,"boom":0.7749261878854823,"arm":1.8750072154175084,"bucket":3.815289744859604},"velocity_rad_s":{"swing":0.001780235837034216,"boom":0.0,"arm":0.0,"bucket":0.0}}}\n'
+        )
+
+        packets = extract_machine_state_packets(capture)
+
+        self.assertEqual(len(packets), 1)
+        self.assertIn("seq=63", format_machine_state_packet(packets[0]))
+        self.assertIn("boom: pos=0.13103 m, vel=0.00000 m/s", format_machine_state_packet(packets[0]))
+        self.assertIn("safety: estop=False, stm32_alive=True, sensor_valid=True, control_enabled=True", format_machine_state_packet(packets[0]))
 
 
 if __name__ == "__main__":

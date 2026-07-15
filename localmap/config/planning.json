@@ -7,7 +7,7 @@
     "reachable_workspace": "../shared/reachable_workspaces/scale_excavator_workspace.json"
   },
   "freshness": {
-    "local_map_max_age_ms": 500,
+    "local_map_max_age_ms": 1500,
     "bucket_tip_max_age_ms": 500,
     "octomap_timeout_s": 5.0
   },
