@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一键启动雷达感知栈：rslidar驱动 -> machine_root点云 -> LocalMap -> OctoMap。
+# 一键启动雷达感知栈：rslidar驱动 -> 目标 ROS 根点云 -> LocalMap -> OctoMap。
 set -eo pipefail
 
 AIRY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -13,23 +13,22 @@ set -u
 
 mkdir -p "${AIRY_ROOT}/runtime/logs"
 
-RSLIDAR_CONFIG="${RSLIDAR_CONFIG:-${AIRY_ROOT}/runtime/config_airy_current.yaml}"
-EXTRINSICS="${EXTRINSICS:-${AIRY_ROOT}/localmap/config/extrinsics_rslidar_to_machine_root.measured.json}"
+# 所有生产 frame/topic/extrinsics/bounds 只从这份右手 profile 取得，禁止用环境变量
+# 偷换坐标系。可用 PERCEPTION_PROFILE 指向另一份经过校验的右手 profile 做诊断。
+PERCEPTION_PROFILE="${PERCEPTION_PROFILE:-${AIRY_ROOT}/localmap/config/perception.json}"
+eval "$(/usr/bin/python3 "${AIRY_ROOT}/localmap/apps/perception/perception_profile_to_shell.py" --profile "${PERCEPTION_PROFILE}")"
+LOCAL_MAP_PUBLISH_TOPIC="${LOCAL_MAP_PUBLISH_TOPIC:-/localmap/local_map_json}"
+DEFAULT_REACHABLE_WORKSPACE_MARKERS=1
 RUN_RSLIDAR="${RUN_RSLIDAR:-1}"
 RUN_TRANSFORM="${RUN_TRANSFORM:-1}"
 RUN_LIVE_LOCAL_MAP="${RUN_LIVE_LOCAL_MAP:-1}"
 RUN_OCTOMAP="${RUN_OCTOMAP:-1}"
-RUN_REACHABLE_WORKSPACE_MARKERS="${RUN_REACHABLE_WORKSPACE_MARKERS:-1}"
+RUN_REACHABLE_WORKSPACE_MARKERS="${RUN_REACHABLE_WORKSPACE_MARKERS:-${DEFAULT_REACHABLE_WORKSPACE_MARKERS}}"
 RUN_TRAJECTORY_MARKERS="${RUN_TRAJECTORY_MARKERS:-0}"
 RUN_BUCKET_TIP_BRIDGE="${RUN_BUCKET_TIP_BRIDGE:-0}"
 TRAJECTORY_JSON="${TRAJECTORY_JSON:-${AIRY_ROOT}/localmap/exports/live_latest/trajectory_command.simple_rrt.json}"
-BUCKET_TIP_BRIDGE_CONFIG="${BUCKET_TIP_BRIDGE_CONFIG:-${AIRY_ROOT}/localmap/config/bucket_tip_tf_bridge.machine_root.json}"
-BUCKET_TIP_JSON="${BUCKET_TIP_JSON:-${AIRY_ROOT}/localmap/exports/live_latest/bucket_tip.machine_root.live.json}"
-REACHABLE_WORKSPACE_JSON="${REACHABLE_WORKSPACE_JSON:-${AIRY_ROOT}/../shared/reachable_workspaces/scale_excavator_workspace.json}"
+REACHABLE_WORKSPACE_JSON="${REACHABLE_WORKSPACE_JSON:-${AIRY_ROOT}/localmap/config/reachable_workspace.machine_root_ros.derived.v1.json}"
 WORKSPACE_MODE="${WORKSPACE_MODE:-MoveToDig}"
-TARGETS_JSON="${TARGETS_JSON:-${AIRY_ROOT}/localmap/config/targets.mock.json}"
-LIVE_LOCAL_MAP_JSON="${LIVE_LOCAL_MAP_JSON:-${AIRY_ROOT}/localmap/exports/live_latest/local_map.live.json}"
-LIVE_LOCAL_MAP_BOUNDS="${LIVE_LOCAL_MAP_BOUNDS:--1.5 3.0 -0.70 1.00 -0.5 4.0}"
 
 PIDS=()
 PID_NAMES=()
@@ -102,29 +101,44 @@ fi
 if [[ "${RUN_TRANSFORM}" == "1" ]]; then
   start_process live_cloud_transform \
     /usr/bin/python3 "${AIRY_ROOT}/localmap/scripts/transform_live_cloud_to_base.py" \
-      --input-topic /rslidar_points \
-      --output-topic /localmap/machine_root_points \
+    --input-topic /rslidar_points \
+      --output-topic "${MACHINE_CLOUD_TOPIC}" \
       --extrinsics "${EXTRINSICS}"
 fi
 
 if [[ "${RUN_LIVE_LOCAL_MAP}" == "1" ]]; then
-  # 关键：run_planning_once.sh会读取这个JSON作为ground/target来源；必须持续刷新到machine_root。
+  # 关键：run_planning_once.sh会读取这个JSON作为ground/target来源；必须持续刷新到同一目标frame。
   # shellcheck disable=SC2086
   start_process live_local_map \
     /usr/bin/python3 "${AIRY_ROOT}/localmap/scripts/run_live_local_map_node.py" \
-      --input-topic /localmap/machine_root_points \
+      --input-topic "${MACHINE_CLOUD_TOPIC}" \
       --output-json "${LIVE_LOCAL_MAP_JSON}" \
+      --publish-topic "${LOCAL_MAP_PUBLISH_TOPIC}" \
       --targets "${TARGETS_JSON}" \
-      --expected-frame machine_root \
+      --expected-frame "${MACHINE_ROOT_FRAME}" \
+      --up-axis "${LOCAL_MAP_UP_AXIS}" \
       --bounds ${LIVE_LOCAL_MAP_BOUNDS} \
       --write-every 5 \
       --publish-every 10
 fi
 
 if [[ "${RUN_OCTOMAP}" == "1" ]]; then
-  # 关键：OctoMap调参仍通过环境变量传给run_octomap_mapping.sh，避免这里复制一份参数逻辑。
+  # 关键：OctoMap配置来自 profile 或历史环境变量，避免在两个脚本中复制坐标系参数。
   start_process octomap \
-    "${AIRY_ROOT}/localmap/scripts/run_octomap_mapping.sh"
+    env \
+      "OCTOMAP_CLOUD_TOPIC=${OCTOMAP_CLOUD_TOPIC:-${MACHINE_CLOUD_TOPIC}}" \
+      "OCTOMAP_FRAME_ID=${OCTOMAP_FRAME_ID:-${MACHINE_ROOT_FRAME}}" \
+      "OCTOMAP_RESOLUTION=${OCTOMAP_RESOLUTION:-0.05}" \
+      "OCTOMAP_MAX_RANGE=${OCTOMAP_MAX_RANGE:-6.0}" \
+      "OCTOMAP_FILTER_GROUND=${OCTOMAP_FILTER_GROUND:-false}" \
+      "OCTOMAP_RESET_INTERVAL_S=${OCTOMAP_RESET_INTERVAL_S:-0}" \
+      "OCTOMAP_POINT_CLOUD_MIN_X=${OCTOMAP_POINT_CLOUD_MIN_X:-}" \
+      "OCTOMAP_POINT_CLOUD_MAX_X=${OCTOMAP_POINT_CLOUD_MAX_X:-}" \
+      "OCTOMAP_POINT_CLOUD_MIN_Y=${OCTOMAP_POINT_CLOUD_MIN_Y:-}" \
+      "OCTOMAP_POINT_CLOUD_MAX_Y=${OCTOMAP_POINT_CLOUD_MAX_Y:-}" \
+      "OCTOMAP_POINT_CLOUD_MIN_Z=${OCTOMAP_POINT_CLOUD_MIN_Z:-}" \
+      "OCTOMAP_POINT_CLOUD_MAX_Z=${OCTOMAP_POINT_CLOUD_MAX_Z:-}" \
+      "${AIRY_ROOT}/localmap/scripts/run_octomap_mapping.sh"
 fi
 
 if [[ "${RUN_REACHABLE_WORKSPACE_MARKERS}" == "1" ]]; then
@@ -135,11 +149,11 @@ if [[ "${RUN_REACHABLE_WORKSPACE_MARKERS}" == "1" ]]; then
 fi
 
 if [[ "${RUN_BUCKET_TIP_BRIDGE}" == "1" ]]; then
-  # 关键：原始TF项目在fk_root发布 /bucket_tip_pose_map；这里桥接到machine_root给RRT读取。
+  # 关键：bridge 只连接同手性、同一规划根；Unity 反射绝不能通过这里伪装成TF。
   start_process bucket_tip_tf_bridge \
     /usr/bin/python3 "${AIRY_ROOT}/localmap/scripts/bridge_bucket_tip_from_tf.py" \
-      --input-topic /bucket_tip_pose_map \
-      --output-topic /localmap/bucket_tip_machine_root_pose \
+      --input-topic "${BUCKET_TIP_FK_TOPIC}" \
+      --output-topic "${BUCKET_TIP_MACHINE_TOPIC}" \
       --bridge "${BUCKET_TIP_BRIDGE_CONFIG}" \
       --output-json "${BUCKET_TIP_JSON}"
 fi
@@ -153,12 +167,13 @@ fi
 cat <<EOF
 
 感知栈已启动。
+目标 ROS 根：${MACHINE_ROOT_FRAME}
 常用检查：
   ros2 topic list | grep -E 'rslidar|machine_root|octomap|occupied|reachable'
-  ros2 topic hz /localmap/machine_root_points
+  ros2 topic hz ${MACHINE_CLOUD_TOPIC}
   /usr/bin/python3 -m json.tool ${LIVE_LOCAL_MAP_JSON} | sed -n '1,40p'
   ros2 topic hz /occupied_cells_vis_array
-  RUN_BUCKET_TIP_BRIDGE=1 时再检查：ros2 topic echo /localmap/bucket_tip_machine_root_pose --once
+  RUN_BUCKET_TIP_BRIDGE=1 时再检查：ros2 topic echo ${BUCKET_TIP_MACHINE_TOPIC} --once
 
 日志目录：
   ${AIRY_ROOT}/runtime/logs

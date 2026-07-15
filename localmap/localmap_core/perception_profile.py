@@ -11,6 +11,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PERCEPTION_PROFILE = PROJECT_ROOT / "localmap" / "config" / "perception.json"
 PERCEPTION_PROFILE_SCHEMA = "perception_profile_v1"
+ROS_MACHINE_ROOT_FRAME = "machine_root_ros"
 
 
 class PerceptionProfileError(ValueError):
@@ -66,6 +67,41 @@ class PerceptionProfile:
     topics: PerceptionTopics
     local_map: LocalMapSettings
     octomap: OctomapSettings
+
+
+def perception_stack_environment(profile: PerceptionProfile) -> dict[str, str]:
+    """编译 profile 为感知启动脚本所需的确定性环境变量。
+
+    这使右手 profile 可以和遗留 Unity profile 共存，且所有 topic、frame、
+    外参与裁剪边界都来自同一个经过校验的配置，而不是散落在 shell 参数中。
+    """
+    x_min, x_max, y_min, y_max, z_min, z_max = profile.octomap.crop_bounds
+    return {
+        "RSLIDAR_CONFIG": str(profile.inputs.rslidar_config),
+        "EXTRINSICS": str(profile.inputs.extrinsics),
+        "TARGETS_JSON": str(profile.inputs.targets),
+        "BUCKET_TIP_BRIDGE_CONFIG": str(profile.inputs.bucket_tip_bridge),
+        "LIVE_LOCAL_MAP_JSON": str(profile.outputs.live_local_map),
+        "BUCKET_TIP_JSON": str(profile.outputs.live_bucket_tip),
+        "MACHINE_ROOT_FRAME": profile.expected_frame,
+        "MACHINE_CLOUD_TOPIC": profile.topics.machine_cloud,
+        "BUCKET_TIP_FK_TOPIC": profile.topics.bucket_tip_fk,
+        "BUCKET_TIP_MACHINE_TOPIC": profile.topics.bucket_tip_machine_root,
+        "LOCAL_MAP_UP_AXIS": "z" if profile.expected_frame == "machine_root_ros" else "y",
+        "LIVE_LOCAL_MAP_BOUNDS": " ".join(str(value) for value in profile.local_map.bounds),
+        "OCTOMAP_CLOUD_TOPIC": profile.topics.machine_cloud,
+        "OCTOMAP_FRAME_ID": profile.expected_frame,
+        "OCTOMAP_RESOLUTION": str(profile.octomap.resolution_m),
+        "OCTOMAP_MAX_RANGE": str(profile.octomap.max_range_m),
+        "OCTOMAP_FILTER_GROUND": str(profile.octomap.filter_ground_plane).lower(),
+        "OCTOMAP_RESET_INTERVAL_S": str(profile.octomap.reset_interval_s),
+        "OCTOMAP_POINT_CLOUD_MIN_X": str(x_min),
+        "OCTOMAP_POINT_CLOUD_MAX_X": str(x_max),
+        "OCTOMAP_POINT_CLOUD_MIN_Y": str(y_min),
+        "OCTOMAP_POINT_CLOUD_MAX_Y": str(y_max),
+        "OCTOMAP_POINT_CLOUD_MIN_Z": str(z_min),
+        "OCTOMAP_POINT_CLOUD_MAX_Z": str(z_max),
+    }
 
 
 def _validate_fields(section: str, data: object, expected: set[str]) -> dict:
@@ -161,9 +197,10 @@ def load_perception_profile(
             f"perception profile schema 必须是 {PERCEPTION_PROFILE_SCHEMA}，实际为 {root['schema']!r}"
         )
     profile_id = _require_string("profile_id", root["profile_id"])
-    if root["expected_frame"] != "machine_root":
+    expected_frame = _require_string("expected_frame", root["expected_frame"])
+    if expected_frame != ROS_MACHINE_ROOT_FRAME:
         raise PerceptionProfileError(
-            f"expected_frame 必须是 'machine_root'，实际为 {root['expected_frame']!r}"
+            f"expected_frame 必须是 {ROS_MACHINE_ROOT_FRAME!r}，实际为 {expected_frame!r}"
         )
 
     inputs = _validate_fields(
@@ -202,7 +239,7 @@ def load_perception_profile(
 
     return PerceptionProfile(
         profile_id=profile_id,
-        expected_frame=root["expected_frame"],
+        expected_frame=expected_frame,
         inputs=PerceptionInputs(
             rslidar_config=_resolve_path("inputs.rslidar_config", inputs["rslidar_config"], project_root),
             extrinsics=_resolve_path("inputs.extrinsics", inputs["extrinsics"], project_root),

@@ -1,0 +1,45 @@
+{
+  "id": "T_machine_root_ros_rslidar.derived_from_unity_v1",
+  "from_frame": "rslidar",
+  "to_frame": "machine_root_ros",
+  "translation_m": [
+    0.3,
+    -1.3,
+    0.624
+  ],
+  "axis_mapping_matrix": [
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      -1.0
+    ]
+  ],
+  "status": "derived_from_T_machine_root_rslidar.measured.v1",
+  "frame_convention": {
+    "machine_root_ros": {
+      "+X": "挖掘机前方，ROS right-handed",
+      "+Y": "挖掘机左侧，ROS right-handed",
+      "+Z": "挖掘机上方，ROS right-handed"
+    },
+    "mapping": {
+      "rslidar +X": "machine_root_ros +X",
+      "rslidar +Y": "machine_root_ros -Y",
+      "rslidar +Z": "machine_root_ros -Z"
+    },
+    "derivation": "由 T_machine_root_rslidar.measured.v1 左手输出经 Unity->ROS 显式轴映射推导；不是新的现场测量。"
+  },
+  "measurement_notes": [
+    "保持与现有 Unity machine_root 外参的物理位置等价，用于 ROS 右手迁移并行差分。",
+    "任何新的现场外参测量应创建新版本，不得改写此 derived.v1 或原 measured.v1。"
+  ]
+}

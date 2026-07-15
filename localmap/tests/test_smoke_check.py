@@ -35,7 +35,7 @@ class SmokeCheckTest(unittest.TestCase):
                 },
             )
 
-            result = smoke.check_local_map_json(path, expected_frame="machine_root")
+            result = smoke.check_local_map_json(path, expected_frame="machine_root_ros")
 
         self.assertEqual(result.status, "fail")
         self.assertIn("期望 machine_root", result.detail)
@@ -47,12 +47,12 @@ class SmokeCheckTest(unittest.TestCase):
                 path,
                 {
                     "schema_version": "trajectory_command.v1",
-                    "frame_id": "machine_root",
+                    "frame_id": "machine_root_ros",
                     "waypoints_base": [[0.0, 0.1, 0.2], [0.2, 0.3, 0.4]],
                 },
             )
 
-            result = smoke.check_trajectory_json(path, expected_frame="machine_root", required=True)
+            result = smoke.check_trajectory_json(path, expected_frame="machine_root_ros", required=True)
 
         self.assertEqual(result.status, "pass")
         self.assertIn("2 个 waypoint", result.detail)
@@ -60,7 +60,7 @@ class SmokeCheckTest(unittest.TestCase):
     def test_live_bucket_tip_is_required(self):
         result = smoke.check_bucket_tip_json(
             Path("/definitely/missing/bucket_tip.json"),
-            expected_frame="machine_root",
+            expected_frame="machine_root_ros",
         )
 
         self.assertEqual(result.status, "fail")
@@ -71,13 +71,13 @@ class SmokeCheckTest(unittest.TestCase):
             smoke.write_json_for_test(
                 path,
                 {
-                    "frame_id": "machine_root",
+                    "frame_id": "machine_root_ros",
                     "position_m": [0.1, 0.2, 0.3],
                     "status": "placeholder",
                 },
             )
 
-            result = smoke.check_bucket_tip_json(path, expected_frame="machine_root")
+            result = smoke.check_bucket_tip_json(path, expected_frame="machine_root_ros")
 
         self.assertEqual(result.status, "fail")
         self.assertIn("live_from_tf", result.detail)
@@ -88,14 +88,14 @@ class SmokeCheckTest(unittest.TestCase):
             smoke.write_json_for_test(
                 path,
                 {
-                    "frame_id": "machine_root",
+                    "frame_id": "machine_root_ros",
                     "position_m": [0.1, math.nan, 0.3],
                     "stamp_s": 1.0,
                     "status": "live_from_tf",
                 },
             )
 
-            result = smoke.check_bucket_tip_json(path, expected_frame="machine_root")
+            result = smoke.check_bucket_tip_json(path, expected_frame="machine_root_ros")
 
         self.assertEqual(result.status, "fail")
 

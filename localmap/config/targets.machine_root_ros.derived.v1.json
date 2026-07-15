@@ -1,0 +1,34 @@
+{
+  "frame_id": "machine_root_ros",
+  "source": {
+    "path": "localmap/config/targets.mock.json",
+    "conversion": "p_ros=(p_unity.z, -p_unity.x, p_unity.y)",
+    "status": "derived_for_parallel_ros_validation"
+  },
+  "dig_targets": [
+    {
+      "id": "mock_dig_001",
+      "position_m": [0.0, -0.8, 0.12],
+      "normal": [0.0, 0.0, 1.0],
+      "radius_m": 0.22,
+      "confidence": 0.5
+    },
+    {
+      "id": "mock_dig_left_far",
+      "position_m": [0.0, 0.8, -0.62],
+      "normal": [0.0, 0.0, 1.0],
+      "radius_m": 0.22,
+      "confidence": 0.5
+    }
+  ],
+  "dump_targets": [
+    {
+      "id": "mock_dump_001",
+      "position_m": [0.5284, 0.2719, -0.3878],
+      "normal": [1.0, 0.0, 0.0],
+      "radius_m": 0.45,
+      "release_height_m": 0.8,
+      "confidence": 0.5
+    }
+  ]
+}

@@ -12,9 +12,9 @@ from pathlib import Path
 
 LOCALMAP_DIR = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = LOCALMAP_DIR / "scripts"
-DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root.measured.json"
-DEFAULT_BUCKET_TIP = LOCALMAP_DIR / "config" / "bucket_tip.machine_root.measured.json"
-DEFAULT_TARGETS = LOCALMAP_DIR / "config" / "targets.mock.json"
+DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root_ros.derived.v1.json"
+DEFAULT_BUCKET_TIP = LOCALMAP_DIR / "config" / "bucket_tip.machine_root_ros.json"
+DEFAULT_TARGETS = LOCALMAP_DIR / "config" / "targets.machine_root_ros.derived.v1.json"
 
 
 @dataclass(frozen=True)

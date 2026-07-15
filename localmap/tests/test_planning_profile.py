@@ -51,7 +51,7 @@ def valid_perception_payload():
     return {
         "schema": "perception_profile_v1",
         "profile_id": "test_live",
-        "expected_frame": "machine_root",
+        "expected_frame": "machine_root_ros",
         "inputs": {
             "rslidar_config": "runtime/lidar.yaml",
             "extrinsics": "localmap/config/extrinsics.json",
@@ -109,7 +109,7 @@ class PlanningProfileTest(unittest.TestCase):
                 project_root=project_root,
             )
 
-        self.assertEqual(profile.expected_frame, "machine_root")
+        self.assertEqual(profile.expected_frame, "machine_root_ros")
         self.assertEqual(profile.inputs.live_local_map, project_root / "runtime/live/local_map.json")
         self.assertEqual(profile.inputs.live_bucket_tip, project_root / "runtime/live/bucket_tip.json")
         self.assertEqual(profile.inputs.octomap_topic, "/octomap_cells")

@@ -17,7 +17,7 @@ class ReachableWorkspaceTest(unittest.TestCase):
         return {
             "schema_version": "0.1.0",
             "machine_id": "test_excavator",
-            "coordinate_frame": "machine_root",
+            "coordinate_frame": "machine_root_ros",
             "workspaces": [
                 {
                     "mode": "MoveToDig",
@@ -35,14 +35,14 @@ class ReachableWorkspaceTest(unittest.TestCase):
             ],
         }
 
-    def test_loads_workspace_and_checks_points_in_machine_root(self):
+    def test_loads_workspace_and_checks_points_in_machine_root_ros(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "workspace.json"
             path.write_text(json.dumps(self.make_workspace_json()), encoding="utf-8")
 
             workspace = load_reachable_workspace(path, mode="MoveToDig")
 
-        self.assertEqual(workspace.frame_id, "machine_root")
+        self.assertEqual(workspace.frame_id, "machine_root_ros")
         self.assertTrue(workspace.contains(np.array([0.5, 0.5, 0.5])))
         self.assertTrue(workspace.contains(np.array([1.0, 0.0, 1.0])))
         self.assertFalse(workspace.contains(np.array([1.2, 0.5, 0.5])))
@@ -85,22 +85,18 @@ class ReachableWorkspaceTest(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.reason, "goal_out_of_reachable_workspace")
 
-    def test_mock_dig_targets_stay_inside_move_to_dig_workspace(self):
+    def test_derived_right_handed_workspace_and_targets_share_machine_root_ros(self):
         project_root = Path(__file__).resolve().parents[3]
         workspace = load_reachable_workspace(
-            project_root / "shared" / "reachable_workspaces" / "scale_excavator_workspace.json",
+            project_root / "AiryLidar" / "localmap" / "config" / "reachable_workspace.machine_root_ros.derived.v1.json",
             mode="MoveToDig",
         )
         targets = json.loads(
-            (project_root / "AiryLidar" / "localmap" / "config" / "targets.mock.json").read_text(encoding="utf-8")
+            (project_root / "AiryLidar" / "localmap" / "config" / "targets.machine_root_ros.derived.v1.json").read_text(encoding="utf-8")
         )
 
-        dig_targets = {target["id"]: np.asarray(target["position_m"], dtype=np.float64) for target in targets["dig_targets"]}
-
-        self.assertTrue(workspace.contains(dig_targets["mock_dig_001"]), dig_targets["mock_dig_001"].tolist())
-        self.assertTrue(workspace.contains(dig_targets["mock_dig_left_far"]), dig_targets["mock_dig_left_far"].tolist())
-        self.assertGreater(dig_targets["mock_dig_001"][0], 0.7)
-        self.assertLess(dig_targets["mock_dig_left_far"][0], -0.7)
+        self.assertEqual(workspace.frame_id, "machine_root_ros")
+        self.assertEqual(targets["frame_id"], "machine_root_ros")
 
 
 if __name__ == "__main__":

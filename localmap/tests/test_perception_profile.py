@@ -12,6 +12,7 @@ from localmap_core.perception_profile import (
     DEFAULT_PERCEPTION_PROFILE,
     PerceptionProfileError,
     load_perception_profile,
+    perception_stack_environment,
 )
 
 
@@ -19,15 +20,25 @@ class PerceptionProfileTest(unittest.TestCase):
     def test_loads_canonical_live_profile(self):
         profile = load_perception_profile(DEFAULT_PERCEPTION_PROFILE)
 
-        self.assertEqual(profile.profile_id, "scale_excavator_live_debug")
-        self.assertEqual(profile.expected_frame, "machine_root")
+        self.assertEqual(profile.profile_id, "scale_excavator_machine_root_ros")
+        self.assertEqual(profile.expected_frame, "machine_root_ros")
         self.assertEqual(profile.topics.raw_cloud, "/rslidar_points")
-        self.assertEqual(profile.topics.machine_cloud, "/localmap/machine_root_points")
-        self.assertEqual(profile.local_map.bounds, (-1.5, 3.0, -0.7, 1.0, -0.5, 4.0))
-        self.assertEqual(profile.octomap.crop_bounds, (-1.5, 3.0, -0.42, 1.0, -0.5, 4.0))
+        self.assertEqual(profile.topics.machine_cloud, "/localmap/machine_root_ros_points")
+        self.assertEqual(profile.local_map.bounds, (-0.5, 4.0, -3.0, 1.5, -0.7, 1.2))
+        self.assertEqual(profile.octomap.crop_bounds, (-0.5, 4.0, -3.0, 1.5, -0.7, 1.2))
         self.assertEqual(profile.octomap.reset_interval_s, 1.0)
         self.assertTrue(profile.inputs.rslidar_config.is_absolute())
         self.assertTrue(profile.outputs.live_local_map.is_absolute())
+
+    def test_canonical_profile_is_right_handed_end_to_end(self):
+        profile = load_perception_profile(DEFAULT_PERCEPTION_PROFILE)
+
+        self.assertEqual(profile.topics.bucket_tip_fk, "/bucket_tip_pose_machine_root_ros")
+        self.assertEqual(profile.topics.bucket_tip_machine_root, "/localmap/bucket_tip_machine_root_ros_pose")
+        environment = perception_stack_environment(profile)
+        self.assertEqual(environment["MACHINE_ROOT_FRAME"], "machine_root_ros")
+        self.assertEqual(environment["LOCAL_MAP_UP_AXIS"], "z")
+        self.assertEqual(environment["OCTOMAP_POINT_CLOUD_MIN_Z"], "-0.7")
 
     def test_rejects_unknown_profile_fields(self):
         data = self._default_data()
@@ -40,7 +51,7 @@ class PerceptionProfileTest(unittest.TestCase):
         data = self._default_data()
         data["expected_frame"] = "map"
 
-        with self.assertRaisesRegex(PerceptionProfileError, "machine_root"):
+        with self.assertRaisesRegex(PerceptionProfileError, "machine_root_ros"):
             self._load_temp(data)
 
         data = self._default_data()

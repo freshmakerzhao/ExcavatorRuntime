@@ -30,11 +30,11 @@ POINT_FIELDS = ("x", "y", "z", "intensity", "ring", "timestamp")
 def build_arg_parser() -> argparse.ArgumentParser:
     """构造实时几何检查参数。"""
     parser = argparse.ArgumentParser(description="检查实时PointCloud2是否已进入目标坐标系。")
-    parser.add_argument("--topic", default="/localmap/machine_root_points", help="要检查的PointCloud2 topic")
-    parser.add_argument("--expected-frame", default="machine_root", help="期望的frame_id")
+    parser.add_argument("--topic", default="/localmap/machine_root_ros_points", help="要检查的PointCloud2 topic")
+    parser.add_argument("--expected-frame", default="machine_root_ros", help="期望的frame_id")
     parser.add_argument("--frames", type=int, default=3, help="采样帧数")
     parser.add_argument("--timeout-s", type=float, default=5.0, help="等待点云超时时间")
-    parser.add_argument("--up-axis", choices=["x", "y", "z"], default="y", help="目标坐标系竖直向上轴")
+    parser.add_argument("--up-axis", choices=["x", "y", "z"], default="z", help="目标坐标系竖直向上轴")
     parser.add_argument("--csv-output", type=Path, help="可选：保存最后一帧的XYZIRT样本CSV")
     parser.add_argument("--csv-points", type=int, default=2000, help="CSV最多保存点数")
     return parser
@@ -133,8 +133,11 @@ class LiveGeometryInspector:
         print(f"z_range_m: {format_range(matrix[:, 2])}")
         print(f"{self.args.up_axis}_percentiles_m: {format_percentiles(matrix[:, up])}")
         print(f"ground_estimate_{self.args.up_axis}_m_p05: {ground_estimate:.3f}")
-        print("expectation: machine_root中通常 +Y 向上，地面点的Y低分位应接近0m。")
-        print("expectation: 你移动已知物体时，它应在对应machine_root方向上变化。")
+        print(
+            f"expectation: {self.args.expected_frame} 中通常 +{self.args.up_axis.upper()} 向上；"
+            f"地面点的{self.args.up_axis.upper()}低分位应接近已测量的地面高度。"
+        )
+        print(f"expectation: 移动已知物体时，它应在 {self.args.expected_frame} 对应轴方向上变化。")
 
         if self.args.csv_output:
             write_csv(self.args.csv_output, matrix, self.args.csv_points)

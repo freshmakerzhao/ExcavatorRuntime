@@ -34,7 +34,7 @@
         "raw_topic",
         "raw_frame_id",
         "raw_point_type",
-        "machine_root",
+        "machine_root_ros",
         "extrinsics"
       ],
       "properties": {

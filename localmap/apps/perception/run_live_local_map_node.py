@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""实时从machine_root点云生成最小LocalMap JSON。"""
+"""实时从machine_root_ros右手点云生成最小LocalMap JSON。"""
 
 from __future__ import annotations
 
@@ -38,19 +38,19 @@ from localmap_core.io import load_json, write_json
 
 
 POINT_FIELDS = ("x", "y", "z", "intensity", "ring", "timestamp")
-DEFAULT_TARGETS = LOCALMAP_DIR / "config" / "targets.mock.json"
+DEFAULT_TARGETS = LOCALMAP_DIR / "config" / "targets.machine_root_ros.derived.v1.json"
 DEFAULT_OUTPUT = LOCALMAP_DIR / "exports" / "live_latest" / "local_map.live.json"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """构造实时LocalMap节点参数。"""
-    parser = argparse.ArgumentParser(description="从实时machine_root点云生成LocalMap JSON。")
-    parser.add_argument("--input-topic", default="/localmap/machine_root_points", help="已转换到目标frame的PointCloud2 topic")
+    parser = argparse.ArgumentParser(description="从实时machine_root_ros点云生成LocalMap JSON。")
+    parser.add_argument("--input-topic", default="/localmap/machine_root_ros_points", help="已转换到目标frame的PointCloud2 topic")
     parser.add_argument("--output-json", type=Path, default=DEFAULT_OUTPUT, help="LocalMap JSON输出路径")
     parser.add_argument("--publish-topic", default="/localmap/local_map_json", help="可选发布LocalMap JSON字符串topic")
     parser.add_argument("--targets", type=Path, default=DEFAULT_TARGETS, help="dig/dump target配置JSON")
-    parser.add_argument("--expected-frame", default="machine_root", help="期望输入点云frame_id")
-    parser.add_argument("--up-axis", choices=["x", "y", "z"], default="y", help="目标坐标系竖直向上轴")
+    parser.add_argument("--expected-frame", default="machine_root_ros", help="期望输入点云frame_id")
+    parser.add_argument("--up-axis", choices=["x", "y", "z"], default="z", help="目标坐标系竖直向上轴")
     parser.add_argument("--write-every", type=int, default=10, help="每收到多少帧写一次JSON；1表示每帧写")
     parser.add_argument("--publish-every", type=int, default=10, help="每收到多少帧发布一次JSON；0表示不发布")
     parser.add_argument("--log-every", type=int, default=30, help="每处理多少帧打印一次摘要；0表示关闭")

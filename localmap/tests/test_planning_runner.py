@@ -72,7 +72,7 @@ class PlanningRunnerTest(unittest.TestCase):
                     {
                         "schema_version": "local_map.v1",
                         "timestamp_s": 999.8,
-                        "frame_id": "machine_root",
+                        "frame_id": "machine_root_ros",
                         "dig_targets": [{"id": "dig_01"}],
                         "dump_targets": [],
                     }
@@ -83,7 +83,7 @@ class PlanningRunnerTest(unittest.TestCase):
                 json.dumps(
                     {
                         "stamp_s": 999.9,
-                        "frame_id": "machine_root",
+                        "frame_id": "machine_root_ros",
                         "status": "live_from_tf",
                         "position_m": [0.1, 0.2, 0.3],
                     }
@@ -155,8 +155,8 @@ class PlanningRunnerTest(unittest.TestCase):
                     PlanningCommand("second", ("python3", "second.py")),
                 ),
                 snapshot=LivePlanningInputs(
-                    local_map=MappingProxyType({"frame_id": "machine_root"}),
-                    bucket_tip=MappingProxyType({"frame_id": "machine_root"}),
+                    local_map=MappingProxyType({"frame_id": "machine_root_ros"}),
+                    bucket_tip=MappingProxyType({"frame_id": "machine_root_ros"}),
                 ),
                 local_map_snapshot=staging / "local_map.snapshot.json",
                 bucket_tip_snapshot=staging / "bucket_tip.snapshot.json",

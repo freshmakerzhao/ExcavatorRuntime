@@ -22,7 +22,7 @@ from localmap_core.trajectory import build_trajectory_command
 
 DEFAULT_REQUEST = LOCALMAP_DIR / "exports" / "rrt_star_request.mock.json"
 DEFAULT_PROFILE = PROJECT_ROOT / "shared" / "machine_profile.json"
-DEFAULT_REACHABLE_WORKSPACE = PROJECT_ROOT / "shared" / "reachable_workspaces" / "scale_excavator_workspace.json"
+DEFAULT_REACHABLE_WORKSPACE = LOCALMAP_DIR / "config" / "reachable_workspace.machine_root_ros.derived.v1.json"
 DEFAULT_OUTPUT = LOCALMAP_DIR / "exports" / "trajectory_command.simple_rrt.json"
 
 

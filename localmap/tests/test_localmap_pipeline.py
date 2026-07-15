@@ -24,7 +24,7 @@ class LocalMapPipelineTest(unittest.TestCase):
         )
         transform = Transform(
             from_frame="rslidar",
-            to_frame="machine_root",
+            to_frame="machine_root_ros",
             translation_m=np.array([1.0, 2.0, 3.0]),
             rotation_rpy_rad=np.array([0.0, 0.0, 0.0]),
             identifier="test",
@@ -44,7 +44,7 @@ class LocalMapPipelineTest(unittest.TestCase):
         points = np.array([[1.0, 2.0, 3.0, 42.0, 7.0, 123.0]], dtype=np.float64)
         transform = Transform(
             from_frame="rslidar",
-            to_frame="machine_root",
+            to_frame="machine_root_ros",
             translation_m=np.array([0.5, 0.0, -0.5]),
             rotation_rpy_rad=np.array([0.0, 0.0, 0.0]),
             identifier="test",
@@ -60,7 +60,7 @@ class LocalMapPipelineTest(unittest.TestCase):
         points = np.array([[2.0, 3.0, 4.0, 42.0, 7.0, 123.0]], dtype=np.float64)
         transform = Transform(
             from_frame="rslidar",
-            to_frame="machine_root",
+            to_frame="machine_root_ros",
             translation_m=np.array([1.0, 10.0, 100.0]),
             rotation_rpy_rad=np.array([0.0, 0.0, 0.0]),
             identifier="axis_mapping_test",
@@ -91,7 +91,7 @@ class LocalMapPipelineTest(unittest.TestCase):
         )
         transform = Transform(
             from_frame="rslidar",
-            to_frame="machine_root",
+            to_frame="machine_root_ros",
             translation_m=np.array([0.0, 0.0, 0.0]),
             rotation_rpy_rad=np.array([0.0, 0.0, 0.0]),
             identifier="test",
@@ -122,7 +122,7 @@ class LocalMapPipelineTest(unittest.TestCase):
         )
 
         self.assertEqual(local_map["schema_version"], "local_map.v1")
-        self.assertEqual(local_map["frame_id"], "machine_root")
+        self.assertEqual(local_map["frame_id"], "machine_root_ros")
         self.assertEqual(local_map["source"]["extrinsics"]["id"], "test")
         self.assertEqual(local_map["dig_targets"][0]["id"], "dig_test")
 

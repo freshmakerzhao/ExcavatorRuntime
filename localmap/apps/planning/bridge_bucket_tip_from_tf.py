@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把TF项目输出的bucket tip位姿桥接到machine_root规划坐标系。"""
+"""把FK bucket tip位姿桥接到machine_root_ros规划坐标系。"""
 
 from __future__ import annotations
 
@@ -27,16 +27,16 @@ from localmap_core.bucket_tip_bridge import build_bucket_tip_state, load_bucket_
 from localmap_core.io import write_json
 
 
-DEFAULT_BRIDGE = LOCALMAP_DIR / "config" / "bucket_tip_tf_bridge.machine_root.json"
-DEFAULT_OUTPUT_JSON = LOCALMAP_DIR / "exports" / "live_latest" / "bucket_tip.machine_root.live.json"
+DEFAULT_BRIDGE = LOCALMAP_DIR / "config" / "bucket_tip_tf_bridge.machine_root_ros.identity.v1.json"
+DEFAULT_OUTPUT_JSON = LOCALMAP_DIR / "exports" / "live_latest" / "bucket_tip.live.json"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """构造命令行参数，默认对接excavator_kinematics包的输出。"""
-    parser = argparse.ArgumentParser(description="把/bucket_tip_pose_map转换为machine_root bucket tip状态。")
-    parser.add_argument("--input-topic", default="/bucket_tip_pose_map", help="TF/FK输出的PoseStamped topic")
-    parser.add_argument("--output-topic", default="/localmap/bucket_tip_machine_root_pose", help="转换后的PoseStamped topic")
-    parser.add_argument("--bridge", type=Path, default=DEFAULT_BRIDGE, help="fk_root到machine_root的bucket tip桥接配置")
+    """构造命令行参数，默认对接 waji_description 的 FK 输出。"""
+    parser = argparse.ArgumentParser(description="把右手 FK bucket tip转换为machine_root_ros规划状态。")
+    parser.add_argument("--input-topic", default="/bucket_tip_pose_machine_root_ros", help="FK输出的PoseStamped topic")
+    parser.add_argument("--output-topic", default="/localmap/bucket_tip_machine_root_ros_pose", help="转换后的PoseStamped topic")
+    parser.add_argument("--bridge", type=Path, default=DEFAULT_BRIDGE, help="machine_root_ros内的bucket tip桥接配置")
     parser.add_argument("--output-json", type=Path, default=DEFAULT_OUTPUT_JSON, help="写给规划脚本读取的bucket tip JSON")
     parser.add_argument("--write-every", type=int, default=5, help="每收到多少帧写一次JSON；1表示每帧都写")
     parser.add_argument("--log-every", type=int, default=30, help="每处理多少帧打印一次统计；0表示关闭")

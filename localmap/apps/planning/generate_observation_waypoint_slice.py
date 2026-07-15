@@ -19,7 +19,7 @@ from localmap_core.trajectory import build_waypoint_observation_slice
 
 
 DEFAULT_TRAJECTORY = LOCALMAP_DIR / "exports" / "trajectory_command.mock.json"
-DEFAULT_BUCKET_TIP = LOCALMAP_DIR / "config" / "bucket_tip.machine_root.measured.json"
+DEFAULT_BUCKET_TIP = LOCALMAP_DIR / "config" / "bucket_tip.machine_root_ros.json"
 DEFAULT_PROFILE = PROJECT_ROOT / "shared" / "machine_profile.json"
 DEFAULT_OUTPUT = LOCALMAP_DIR / "exports" / "observation_waypoint_slice.mock.json"
 

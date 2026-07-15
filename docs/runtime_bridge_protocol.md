@@ -34,6 +34,7 @@ PC -> Orin action: 18082/udp
   "schema_version": "1.0",
   "seq": 12345,
   "stamp_ms": 1780000000000,
+  "stm32_stamp_ms": 850104,
   "source": "orin",
   "machine_id": "scale_excavator_v1",
   "safety": {
@@ -64,6 +65,8 @@ PC -> Orin action: 18082/udp
 
 - `seq` 是包序号，无单位。
 - `stamp_ms` 是 Orin 发出这一帧时的系统时间，单位 ms。
+- `stm32_stamp_ms` 是 STM32 开机后的 tick（ms），不是 epoch，不能和 Orin/PC wall clock 相减；它用于追溯同一源采样。PC 解码和日志必须保留它。
+- PC 发布 `/joint_states` 时把 Orin `stamp_ms` 写入 ROS header；FK/TF 与 Bucket Tip pose 保留该时间。ROS `Header` 没有 `seq` 字段，因此 `seq` 的端到端关联仍需要专用的显式 provenance Interface，不能写入 frame 名或伪造关节。
 - `actuator_state` 后续进入 ONNX 38 维 observation，不要归一化。
 - `joint_state.position_rad` 是 FK 计算 bucket tip 用的关节角，单位 rad。
 - 第一阶段 Orin 不需要发送 `joint_state.velocity_rad_s` 和 `raw_sensor`；PC 侧会把缺失的关节角速度补为 0。

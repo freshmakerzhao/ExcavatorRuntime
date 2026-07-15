@@ -38,7 +38,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--topic", default="/occupied_cells_vis_array", help="OctoMap MarkerArray topic")
     parser.add_argument("--base-local-map", type=Path, default=DEFAULT_BASE_LOCAL_MAP, help="作为ground/target来源的LocalMap JSON")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="输出LocalMap JSON")
-    parser.add_argument("--expected-frame", default="machine_root", help="期望MarkerArray frame_id")
+    parser.add_argument("--expected-frame", default="machine_root_ros", help="期望MarkerArray frame_id")
     parser.add_argument("--timeout-s", type=float, default=5.0, help="等待MarkerArray的超时时间")
     parser.add_argument("--box-size", type=float, default=0.15, help="粗化后的box尺寸，单位米")
     parser.add_argument("--max-obstacles", type=int, default=2000, help="最多输出多少个box obstacle")

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from runtime_bridge.apps.inspect_orin_packets import extract_machine_state_packets, format_machine_state_packet
 from runtime_bridge.apps.pc_runtime_bridge import build_arg_parser
+from runtime_bridge.ros_provenance import epoch_ms_to_ros_time_fields
 from runtime_bridge.runtime_config import load_runtime_config
 
 
@@ -45,6 +46,12 @@ class RuntimeAppsTest(unittest.TestCase):
         self.assertIn("seq=63", format_machine_state_packet(packets[0]))
         self.assertIn("boom: pos=0.13103 m, vel=0.00000 m/s", format_machine_state_packet(packets[0]))
         self.assertIn("safety: estop=False, stm32_alive=True, sensor_valid=True, control_enabled=True", format_machine_state_packet(packets[0]))
+
+    def test_orin_epoch_stamp_converts_to_ros_header_time_without_pc_arrival_time(self):
+        self.assertEqual(
+            epoch_ms_to_ros_time_fields(1783666906735),
+            (1783666906, 735000000),
+        )
 
 
 if __name__ == "__main__":

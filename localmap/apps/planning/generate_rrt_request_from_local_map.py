@@ -19,7 +19,7 @@ from localmap_core.trajectory import build_rrt_star_request
 
 
 DEFAULT_LOCAL_MAP = LOCALMAP_DIR / "exports" / "local_map_from_npz.mock.json"
-DEFAULT_BUCKET_TIP = LOCALMAP_DIR / "config" / "bucket_tip.machine_root.measured.json"
+DEFAULT_BUCKET_TIP = LOCALMAP_DIR / "config" / "bucket_tip.machine_root_ros.json"
 DEFAULT_PROFILE = PROJECT_ROOT / "shared" / "machine_profile.json"
 DEFAULT_OUTPUT = LOCALMAP_DIR / "exports" / "rrt_star_request.mock.json"
 

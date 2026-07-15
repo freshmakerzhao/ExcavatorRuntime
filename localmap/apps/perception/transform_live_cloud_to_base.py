@@ -37,7 +37,7 @@ from localmap_core.geometry import finite_xyz_mask, transform_xyzirt_points
 from localmap_core.io import load_extrinsics
 
 
-DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root.measured.json"
+DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root_ros.derived.v1.json"
 POINT_FIELDS = ("x", "y", "z", "intensity", "ring", "timestamp")
 POINT_DTYPE = np.dtype(
     [
@@ -61,9 +61,9 @@ ROS_POINT_FIELDS = [
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """构造实时转换节点参数。"""
-    parser = argparse.ArgumentParser(description="实时发布machine_root/base坐标系下的PointCloud2。")
+    parser = argparse.ArgumentParser(description="实时发布machine_root_ros右手坐标系下的PointCloud2。")
     parser.add_argument("--input-topic", default="/rslidar_points", help="原始PointCloud2 topic")
-    parser.add_argument("--output-topic", default="/localmap/machine_root_points", help="转换后的PointCloud2 topic")
+    parser.add_argument("--output-topic", default="/localmap/machine_root_ros_points", help="转换后的PointCloud2 topic")
     parser.add_argument("--extrinsics", type=Path, default=DEFAULT_EXTRINSICS, help="rslidar到目标frame的外参JSON")
     parser.add_argument("--qos-reliability", choices=["reliable", "best_effort"], default="reliable", help="订阅/发布QoS可靠性")
     parser.add_argument("--tf-parent", default="world", help="静态TF父frame；用于让RViz认识目标frame")

@@ -4,7 +4,7 @@
   "inputs": {
     "perception_profile": "localmap/config/perception.json",
     "machine_profile": "../shared/machine_profile.json",
-    "reachable_workspace": "../shared/reachable_workspaces/scale_excavator_workspace.json"
+    "reachable_workspace": "localmap/config/reachable_workspace.machine_root_ros.derived.v1.json"
   },
   "freshness": {
     "local_map_max_age_ms": 1500,

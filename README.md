@@ -167,7 +167,7 @@ cd /home/zhaoshuai/workspace_uinty/RL_prj/ExcavatorRuntime
 source /opt/ros/jazzy/setup.zsh
 source ros2_ws/install/setup.zsh
 
-ros2 launch excavator_kinematics excavator_tf.launch.py
+ros2 launch waji_description display.launch.py
 ```
 
 FK 的输入是关节角，不是油缸位移：
@@ -188,22 +188,14 @@ ros2 topic pub /joint_states sensor_msgs/msg/JointState "{
 }" -r 10
 ```
 
-或者启动关节角滑块窗口：
-
-```bash
-ros2 run excavator_kinematics joint_slider_publisher \
-  --publish-on-change \
-  --initial 0.0 0.0 0.0 0.0
-```
-
 单独启动 bucket tip bridge：
 
 ```bash
-python3 localmap/scripts/bridge_bucket_tip_from_tf.py \
-  --input-topic /bucket_tip_pose_map \
-  --output-topic /localmap/bucket_tip_machine_root_pose \
-  --bridge localmap/config/bucket_tip_tf_bridge.machine_root.json \
-  --output-json localmap/exports/live_latest/bucket_tip.machine_root.live.json
+python3 localmap/apps/planning/bridge_bucket_tip_from_tf.py \
+  --input-topic /bucket_tip_pose_machine_root_ros \
+  --output-topic /localmap/bucket_tip_machine_root_ros_pose \
+  --bridge localmap/config/bucket_tip_tf_bridge.machine_root_ros.identity.v1.json \
+  --output-json localmap/exports/live_latest/bucket_tip.live.json
 ```
 
 或者在感知栈里一起启动：

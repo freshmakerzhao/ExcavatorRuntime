@@ -21,8 +21,8 @@ EOF
 fi
 
 # 这些环境变量允许现场快速调参，不需要反复编辑脚本。
-OCTOMAP_CLOUD_TOPIC="${OCTOMAP_CLOUD_TOPIC:-/localmap/machine_root_points}"
-OCTOMAP_FRAME_ID="${OCTOMAP_FRAME_ID:-machine_root}"
+OCTOMAP_CLOUD_TOPIC="${OCTOMAP_CLOUD_TOPIC:-/localmap/machine_root_ros_points}"
+OCTOMAP_FRAME_ID="${OCTOMAP_FRAME_ID:-machine_root_ros}"
 OCTOMAP_RESOLUTION="${OCTOMAP_RESOLUTION:-0.05}"
 OCTOMAP_MAX_RANGE="${OCTOMAP_MAX_RANGE:-6.0}"
 OCTOMAP_FILTER_GROUND="${OCTOMAP_FILTER_GROUND:-false}"

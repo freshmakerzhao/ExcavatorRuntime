@@ -24,7 +24,7 @@ class PlanningInputsTest(unittest.TestCase):
                     {
                         "schema_version": "local_map.v1",
                         "timestamp_s": 999.8,
-                        "frame_id": "machine_root",
+                        "frame_id": "machine_root_ros",
                         "dig_targets": [],
                         "dump_targets": [],
                     }
@@ -35,7 +35,7 @@ class PlanningInputsTest(unittest.TestCase):
                 json.dumps(
                     {
                         "stamp_s": 999.9,
-                        "frame_id": "machine_root",
+                        "frame_id": "machine_root_ros",
                         "status": "live_from_tf",
                         "position_m": [0.1, 0.2, 0.3],
                     }
@@ -54,7 +54,7 @@ class PlanningInputsTest(unittest.TestCase):
 
             snapshot = load_live_planning_inputs(profile, now_s=1000.0)
 
-        self.assertEqual(snapshot.local_map["frame_id"], "machine_root")
+        self.assertEqual(snapshot.local_map["frame_id"], "machine_root_ros")
         self.assertEqual(snapshot.bucket_tip["position_m"], (0.1, 0.2, 0.3))
         with self.assertRaises(TypeError):
             snapshot.local_map["frame_id"] = "fake_base"
@@ -69,7 +69,7 @@ class PlanningInputsTest(unittest.TestCase):
                     {
                         "schema_version": "local_map.v1",
                         "timestamp_s": 999.8,
-                        "frame_id": "machine_root",
+                        "frame_id": "machine_root_ros",
                     }
                 ),
                 encoding="utf-8",
@@ -78,7 +78,7 @@ class PlanningInputsTest(unittest.TestCase):
                 json.dumps(
                     {
                         "stamp_s": 998.0,
-                        "frame_id": "machine_root",
+                        "frame_id": "machine_root_ros",
                         "status": "live_from_tf",
                         "position_m": [0.1, 0.2, 0.3],
                     }
@@ -110,7 +110,7 @@ class PlanningInputsTest(unittest.TestCase):
                         "schema_version": "local_map.v1",
                         # 真实失败样本：规划读取时LocalMap为529.6 ms旧。
                         "timestamp_s": 999.4704,
-                        "frame_id": "machine_root",
+                        "frame_id": "machine_root_ros",
                     }
                 ),
                 encoding="utf-8",
@@ -119,7 +119,7 @@ class PlanningInputsTest(unittest.TestCase):
                 json.dumps(
                     {
                         "stamp_s": 999.9,
-                        "frame_id": "machine_root",
+                        "frame_id": "machine_root_ros",
                         "status": "live_from_tf",
                         "position_m": [0.1, 0.2, 0.3],
                     }

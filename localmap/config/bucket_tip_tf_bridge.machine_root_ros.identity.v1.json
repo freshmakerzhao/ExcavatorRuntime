@@ -1,0 +1,16 @@
+{
+  "id": "T_machine_root_ros_machine_root_ros_bucket_tip_identity.v1",
+  "source_frame": "machine_root_ros",
+  "target_frame": "machine_root_ros",
+  "translation_m": [0.0, 0.0, 0.0],
+  "axis_mapping_matrix": [
+    [1.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 0.0, 1.0]
+  ],
+  "status": "identity_from_fk_ros_root",
+  "notes": [
+    "FK 已直接发布 machine_root_ros；此 bridge 只为规划 JSON 快照和 topic 生命周期提供统一入口。",
+    "该矩阵是右手坐标系中的恒等刚体变换，不是 Unity 手性转换。"
+  ]
+}

@@ -38,7 +38,7 @@ def write_json_for_test(path: Path, data: dict[str, Any]) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     """构造 smoke check 命令行参数。"""
     parser = argparse.ArgumentParser(description="检查雷达/LocalMap/OctoMap/RRT基础链路是否健康。")
-    parser.add_argument("--expected-frame", default="machine_root", help="LocalMap和规划产物应使用的frame")
+    parser.add_argument("--expected-frame", default="machine_root_ros", help="LocalMap和规划产物应使用的frame")
     parser.add_argument("--export-dir", type=Path, default=DEFAULT_EXPORT_DIR, help="live_latest产物目录")
     parser.add_argument("--local-map-json", type=Path, help="LocalMap live JSON路径")
     parser.add_argument("--trajectory-json", type=Path, help="TrajectoryCommand JSON路径")

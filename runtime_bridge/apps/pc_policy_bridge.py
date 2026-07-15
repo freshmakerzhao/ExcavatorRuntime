@@ -36,6 +36,8 @@ from runtime_bridge.protocol import (
     now_ms,
 )
 from runtime_bridge.runtime_config import DEFAULT_RUNTIME_CONFIG, load_runtime_config
+from runtime_bridge.ros_provenance import set_ros_header_stamp
+from runtime_bridge.unity_observation_adapter import UnityObservationAdapter
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -52,14 +54,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 class RuntimeRosIo:
-    """ROS2 I/O：发布 /joint_states 给 FK，并订阅 /bucket_tip_observation。"""
+    """ROS2 I/O：发布关节状态，并在 ONNX 边界适配右手 FK tip。"""
 
     def __init__(self) -> None:
         try:
             import rclpy
+            from geometry_msgs.msg import PoseStamped
             from rclpy.node import Node
             from sensor_msgs.msg import JointState
-            from std_msgs.msg import Float32MultiArray
         except ModuleNotFoundError as exc:
             raise SystemExit(
                 "无法导入ROS2 Python模块。请先 source /opt/ros/jazzy/setup.zsh 和 ros2_ws/install/setup.zsh。"
@@ -68,27 +70,51 @@ class RuntimeRosIo:
         self.rclpy = rclpy
         self.JointState = JointState
         self.latest_bucket_tip: BucketTipObservation | None = None
+        self.unity_observation_adapter = UnityObservationAdapter()
         rclpy.init(args=None)
         self.node = Node("pc_policy_bridge")
         self.joint_publisher = self.node.create_publisher(JointState, "/joint_states", 10)
-        self.node.create_subscription(Float32MultiArray, "/bucket_tip_observation", self._on_bucket_tip, 10)
-
-    def _on_bucket_tip(self, message) -> None:
-        """接收 FK 节点发布的 [x, y, z, pitch_rad]。"""
-        values = list(message.data)
-        if len(values) < 4:
-            return
-        stamp_ms = int(self.node.get_clock().now().nanoseconds / 1_000_000)
-        self.latest_bucket_tip = BucketTipObservation(
-            position_m=(float(values[0]), float(values[1]), float(values[2])),
-            pitch_rad=float(values[3]),
-            stamp_ms=stamp_ms,
+        self.node.create_subscription(
+            PoseStamped,
+            "/bucket_tip_pose_machine_root_ros",
+            self._on_bucket_tip_ros,
+            10,
         )
+
+    def _on_bucket_tip_ros(self, message) -> None:
+        """接收带 FK 源时间的右手 PoseStamped，并在 ONNX 边界转为 Unity。"""
+        if message.header.frame_id != "machine_root_ros":
+            self.node.get_logger().warning(
+                "drop bucket tip with unexpected frame_id="
+                f"{message.header.frame_id!r}; expected 'machine_root_ros'"
+            )
+            return
+        stamp_ms = int(message.header.stamp.sec) * 1_000 + int(message.header.stamp.nanosec) // 1_000_000
+        if stamp_ms <= 0:
+            self.node.get_logger().warning("drop bucket tip without a valid source timestamp")
+            return
+        try:
+            self.latest_bucket_tip = self.unity_observation_adapter.ros_pose_to_unity_bucket_tip(
+                position_m=(
+                    message.pose.position.x,
+                    message.pose.position.y,
+                    message.pose.position.z,
+                ),
+                orientation_xyzw=(
+                    message.pose.orientation.x,
+                    message.pose.orientation.y,
+                    message.pose.orientation.z,
+                    message.pose.orientation.w,
+                ),
+                stamp_ms=stamp_ms,
+            )
+        except ValueError as exc:
+            self.node.get_logger().warning(f"drop invalid right-handed bucket tip pose: {exc}")
 
     def publish_joint_states(self, state: MachineStatePacket) -> None:
         """把 Orin 关节角发布给 FK 节点，驱动 bucket tip 更新。"""
         message = self.JointState()
-        message.header.stamp = self.node.get_clock().now().to_msg()
+        set_ros_header_stamp(message.header, state.stamp_ms)
         message.name = ["swing_joint", "boom_joint", "arm_joint", "bucket_joint"]
         # 关键：协议短名转换为运动学包使用的 joint name。
         message.position = [
@@ -238,7 +264,11 @@ def main() -> int:
             bucket_tip = ros_io.latest_bucket_tip
             if bucket_tip is None:
                 if config.diagnostics.print_every > 0 and state_count % config.diagnostics.print_every == 0:
-                    print("waiting for /bucket_tip_observation; is excavator_tf_node running?", flush=True)
+                    print(
+                        "waiting for /bucket_tip_pose_machine_root_ros; "
+                        "is waji_description display.launch.py running?",
+                        flush=True,
+                    )
                 continue
 
             age_ms = int(time.time() * 1000) - int(bucket_tip.stamp_ms or 0)
@@ -246,7 +276,9 @@ def main() -> int:
                 print(f"skip stale bucket tip: age={age_ms}ms", flush=True)
                 continue
 
-            waypoint_values = load_waypoint_slice_values(config.artifacts.waypoint_slice)
+            waypoint_values = ros_io.unity_observation_adapter.waypoint_values_to_unity(
+                load_waypoint_slice_values(config.artifacts.waypoint_slice)
+            )
             observation = observation_builder.build(
                 packet,
                 bucket_tip,

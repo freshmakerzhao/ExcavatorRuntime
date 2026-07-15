@@ -24,6 +24,7 @@ from runtime_bridge.protocol import (
 )
 from runtime_bridge.action_journal import ActionJournalUnavailable, RecordedUdpSender
 from runtime_bridge.runtime_config import DEFAULT_RUNTIME_CONFIG, load_runtime_config
+from runtime_bridge.ros_provenance import set_ros_header_stamp
 
 
 DEFAULT_LATEST_STATE = PROJECT_ROOT / "runtime_bridge" / "exports" / "latest_state.json"
@@ -59,9 +60,9 @@ class JointStatePublisher:
         self.publisher = self.node.create_publisher(JointState, "/joint_states", 10)
 
     def publish(self, state: ExcavatorStatePacket | MachineStatePacket) -> None:
-        """发布 ROS2 JointState，供 excavator_kinematics 计算 bucket tip。"""
+        """发布 ROS2 JointState，供 waji_description 计算 bucket tip。"""
         message = self.JointState()
-        message.header.stamp = self.node.get_clock().now().to_msg()
+        set_ros_header_stamp(message.header, state.stamp_ms)
         message.name = ["swing_joint", "boom_joint", "arm_joint", "bucket_joint"]
         # 关键：协议里是短名，ROS JointState 里是运动学包要求的 joint name。
         message.position = [

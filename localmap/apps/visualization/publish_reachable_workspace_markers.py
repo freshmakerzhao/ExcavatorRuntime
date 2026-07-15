@@ -27,7 +27,7 @@ sys.path.insert(0, str(LOCALMAP_DIR))
 from localmap_core.reachable_workspace import ReachableWorkspace, load_reachable_workspace
 
 
-DEFAULT_WORKSPACE = PROJECT_ROOT / "shared" / "reachable_workspaces" / "scale_excavator_workspace.json"
+DEFAULT_WORKSPACE = LOCALMAP_DIR / "config" / "reachable_workspace.machine_root_ros.derived.v1.json"
 
 SECTION_EDGES = ((0, 1), (0, 2), (1, 3), (2, 3))
 LONGITUDINAL_EDGES = ((0, 0), (1, 1), (2, 2), (3, 3))

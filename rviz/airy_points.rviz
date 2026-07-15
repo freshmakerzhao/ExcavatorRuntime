@@ -7,11 +7,9 @@ Panels:
         - /Global Options1
         - /Status1
         - /Grid1
-        - /PointCloud21
+        - /RobotModel1
         - /Axes1
         - /MarkerArray1
-        - /MarkerArray2
-        - /MarkerArray3
       Splitter Ratio: 0.3927444815635681
     Tree Height: 871
   - Class: rviz_common/Selection
@@ -54,10 +52,69 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Value: true
     - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        arm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        boom_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        bucket_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        bucket_tip:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        fk_root:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        swing_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Mass Properties:
+        Inertia: false
+        Mass: false
+      Name: RobotModel
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 0.6029854416847229
-        Min Value: -0.7279855608940125
+        Max Value: 1.2136023044586182
+        Min Value: -9.674341201782227
         Value: true
       Axis: Y
       Channel Name: intensity
@@ -82,7 +139,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /localmap/machine_root_points
+        Value: /localmap/machine_root_ros_points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -90,52 +147,65 @@ Visualization Manager:
       Enabled: true
       Length: 1
       Name: Axes
-      Radius: 0.10000000149011612
-      Reference Frame: machine_root
+      Radius: 0.05000000074505806
+      Reference Frame: machine_root_ros
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: MarkerArray
       Namespaces:
-        bucket_tip_path: true
-        bucket_tip_waypoints: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /localmap/planned_bucket_tip_markers
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: MarkerArray
       Namespaces:
-        map: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /occupied_cells_vis_array
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: MarkerArray
       Namespaces:
-        reachable_workspace_anchors: true
-        reachable_workspace_edges: true
-        reachable_workspace_surface: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /localmap/reachable_workspace_markers
-      Value: true
+      Value: false
+    - Class: rviz_default_plugins/TF
+      Enabled: false
+      Filter (blacklist): ""
+      Filter (whitelist): ""
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Tree:
+        {}
+      Update Interval: 0
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: machine_root
+    Fixed Frame: machine_root_ros
     Frame Rate: 30
   Name: root
   Tools:
@@ -178,25 +248,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 5.015521049499512
+      Distance: 10.23843765258789
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.8601143956184387
-        Y: 0.7934368848800659
-        Z: 0.4878387153148651
+        X: 0.6395378708839417
+        Y: 0.10253562778234482
+        Z: -0.3352341949939728
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.8497970104217529
+      Pitch: 0.5702037215232849
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 1.5249719619750977
+      Yaw: 3.306816339492798
     Saved: ~
 Window Geometry:
   Displays:
