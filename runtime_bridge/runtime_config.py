@@ -10,7 +10,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RUNTIME_CONFIG = PROJECT_ROOT / "runtime_bridge" / "config" / "runtime.json"
-RUNTIME_CONFIG_SCHEMA = "runtime_bridge_config_v3"
+RUNTIME_CONFIG_SCHEMA = "runtime_bridge_config_v10"
 
 
 class RuntimeConfigError(ValueError):
@@ -39,6 +39,8 @@ class NetworkConfig:
 class ArtifactConfig:
     onnx: Path
     machine_profile: Path
+    fixed_action_profile: Path
+    urdf: Path
     waypoint_slice: Path
     latest_observation: Path
 
@@ -52,6 +54,17 @@ class ArtifactConfig:
         """固定动作入口只依赖机型配置，不要求策略制品。"""
         self._require_file("machine_profile")
 
+    def require_fixed_action_inputs(self) -> None:
+        """固定动作必须绑定模板、机型配置和当前 URDF。"""
+        self._require_file("machine_profile")
+        self._require_file("fixed_action_profile")
+        self._require_file("urdf")
+
+    def require_live_control_inputs(self) -> None:
+        """Live control 启动前检查策略和固定动作的全部只读制品。"""
+        self._require_file("onnx")
+        self.require_fixed_action_inputs()
+
     def _require_file(self, name: str) -> None:
         path = getattr(self, name)
         if not path.is_file():
@@ -61,16 +74,30 @@ class ArtifactConfig:
 @dataclass(frozen=True)
 class PolicyConfig:
     bucket_tip_timeout_ms: int
+    machine_state_timeout_ms: int
 
 
 @dataclass(frozen=True)
 class FixedActionConfig:
-    kp: float
-    min_action: float
-    max_action: float
-    tolerance: float
-    step_timeout_s: float
-    hold_s: float
+    expected_profile_sha256: str
+
+
+@dataclass(frozen=True)
+class ManualJogConfig:
+    enabled: bool
+    allowed_actuators: tuple[str, ...]
+    speed_fraction: float
+    command_period_ms: int
+    heartbeat_timeout_ms: int
+    max_hold_ms: int
+    position_margin_m: float
+
+
+@dataclass(frozen=True)
+class FollowControlConfig:
+    mode: str
+    allowed_actuators: tuple[str, ...]
+    heartbeat_timeout_ms: int
 
 
 @dataclass(frozen=True)
@@ -92,6 +119,8 @@ class RuntimeConfig:
     artifacts: ArtifactConfig
     policy: PolicyConfig
     fixed_action: FixedActionConfig
+    manual_jog: ManualJogConfig
+    follow_control: FollowControlConfig
     diagnostics: DiagnosticsConfig
     action_journal: ActionJournalConfig
 
@@ -154,6 +183,8 @@ def load_runtime_config(
             "artifacts",
             "policy",
             "fixed_action",
+            "manual_jog",
+            "follow_control",
             "diagnostics",
             "action_journal",
         },
@@ -162,6 +193,8 @@ def load_runtime_config(
     artifacts = data["artifacts"]
     policy = data["policy"]
     fixed_action = data["fixed_action"]
+    manual_jog = data["manual_jog"]
+    follow_control = data["follow_control"]
     diagnostics = data["diagnostics"]
     action_journal = data["action_journal"]
     _validate_fields(
@@ -182,15 +215,43 @@ def load_runtime_config(
         {
             "onnx",
             "machine_profile",
+            "fixed_action_profile",
+            "urdf",
             "waypoint_slice",
             "latest_observation",
         },
     )
-    _validate_fields("policy", policy, {"bucket_tip_timeout_ms"})
+    _validate_fields(
+        "policy", policy, {"bucket_tip_timeout_ms", "machine_state_timeout_ms"}
+    )
     _validate_fields(
         "fixed_action",
         fixed_action,
-        {"kp", "min_action", "max_action", "tolerance", "step_timeout_s", "hold_s"},
+        {
+            "expected_profile_sha256",
+        },
+    )
+    _validate_fields(
+        "manual_jog",
+        manual_jog,
+        {
+            "enabled",
+            "allowed_actuators",
+            "speed_fraction",
+            "command_period_ms",
+            "heartbeat_timeout_ms",
+            "max_hold_ms",
+            "position_margin_m",
+        },
+    )
+    _validate_fields(
+        "follow_control",
+        follow_control,
+        {
+            "mode",
+            "allowed_actuators",
+            "heartbeat_timeout_ms",
+        },
     )
     _validate_fields("diagnostics", diagnostics, {"print_every", "write_every"})
     _validate_fields(
@@ -214,6 +275,12 @@ def load_runtime_config(
         1,
         60000,
     )
+    _require_int_range(
+        "policy.machine_state_timeout_ms",
+        policy.get("machine_state_timeout_ms"),
+        100,
+        2000,
+    )
     _require_int_range("diagnostics.print_every", diagnostics.get("print_every"), 0, 1000000)
     _require_int_range("diagnostics.write_every", diagnostics.get("write_every"), 0, 1000000)
     _require_int_range(
@@ -228,30 +295,76 @@ def load_runtime_config(
         1,
         1000,
     )
-    _require_number_range("fixed_action.kp", fixed_action.get("kp"), 0.000001, 100.0)
-    min_action = _require_number_range(
-        "fixed_action.min_action",
-        fixed_action.get("min_action"),
-        0.0,
-        1.0,
+    expected_profile_sha256 = fixed_action.get("expected_profile_sha256")
+    if (
+        not isinstance(expected_profile_sha256, str)
+        or len(expected_profile_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in expected_profile_sha256)
+    ):
+        raise RuntimeConfigError(
+            "fixed_action.expected_profile_sha256 必须是64位小写SHA256"
+        )
+    if not isinstance(manual_jog.get("enabled"), bool):
+        raise RuntimeConfigError("manual_jog.enabled 必须是布尔值")
+    allowed_actuators = manual_jog.get("allowed_actuators")
+    if (
+        not isinstance(allowed_actuators, list)
+        or not allowed_actuators
+        or any(not isinstance(name, str) for name in allowed_actuators)
+        or len(set(allowed_actuators)) != len(allowed_actuators)
+        or any(name not in {"boom", "stick", "bucket"} for name in allowed_actuators)
+    ):
+        raise RuntimeConfigError(
+            "manual_jog.allowed_actuators 必须是 boom/stick/bucket 的非空无重复数组"
+        )
+    speed_fraction = _require_number_range(
+        "manual_jog.speed_fraction", manual_jog.get("speed_fraction"), 0.01, 0.2
     )
-    max_action = _require_number_range(
-        "fixed_action.max_action",
-        fixed_action.get("max_action"),
-        0.000001,
-        1.0,
+    command_period_ms = _require_int_range(
+        "manual_jog.command_period_ms", manual_jog.get("command_period_ms"), 25, 100
     )
-    if min_action > max_action:
-        raise RuntimeConfigError("fixed_action.min_action 不能大于 max_action")
-    _require_number_range("fixed_action.tolerance", fixed_action.get("tolerance"), 0.000001, 1.0)
-    _require_number_range(
-        "fixed_action.step_timeout_s",
-        fixed_action.get("step_timeout_s"),
-        0.000001,
-        3600.0,
+    heartbeat_timeout_ms = _require_int_range(
+        "manual_jog.heartbeat_timeout_ms",
+        manual_jog.get("heartbeat_timeout_ms"),
+        75,
+        500,
     )
-    _require_number_range("fixed_action.hold_s", fixed_action.get("hold_s"), 0.0, 60.0)
-
+    if heartbeat_timeout_ms < command_period_ms * 3:
+        raise RuntimeConfigError(
+            "manual_jog.heartbeat_timeout_ms 必须至少是 command_period_ms 的3倍"
+        )
+    max_hold_ms = _require_int_range(
+        "manual_jog.max_hold_ms", manual_jog.get("max_hold_ms"), 250, 5000
+    )
+    position_margin_m = _require_number_range(
+        "manual_jog.position_margin_m",
+        manual_jog.get("position_margin_m"),
+        0.0005,
+        0.01,
+    )
+    if follow_control.get("mode") != "supervised_canary":
+        raise RuntimeConfigError(
+            "follow_control.mode 当前必须是 'supervised_canary'，"
+            f"实际为 {follow_control.get('mode')!r}"
+        )
+    follow_allowed_actuators = follow_control.get("allowed_actuators")
+    if (
+        not isinstance(follow_allowed_actuators, list)
+        or not follow_allowed_actuators
+        or any(not isinstance(name, str) for name in follow_allowed_actuators)
+        or len(set(follow_allowed_actuators)) != len(follow_allowed_actuators)
+        or follow_allowed_actuators != ["boom", "stick", "bucket", "swing"]
+    ):
+        raise RuntimeConfigError(
+            "follow_control.allowed_actuators 必须严格为 "
+            "['boom', 'stick', 'bucket', 'swing']，不得改写 ONNX 动作轴"
+        )
+    follow_heartbeat_timeout_ms = _require_int_range(
+        "follow_control.heartbeat_timeout_ms",
+        follow_control.get("heartbeat_timeout_ms"),
+        75,
+        500,
+    )
     def resolve(name: str, value: object) -> Path:
         if not isinstance(value, str) or not value.strip():
             raise RuntimeConfigError(f"{name} 必须是非空路径字符串")
@@ -261,6 +374,10 @@ def load_runtime_config(
     artifact_config = ArtifactConfig(
         onnx=resolve("artifacts.onnx", artifacts["onnx"]),
         machine_profile=resolve("artifacts.machine_profile", artifacts["machine_profile"]),
+        fixed_action_profile=resolve(
+            "artifacts.fixed_action_profile", artifacts["fixed_action_profile"]
+        ),
+        urdf=resolve("artifacts.urdf", artifacts["urdf"]),
         waypoint_slice=resolve("artifacts.waypoint_slice", artifacts["waypoint_slice"]),
         latest_observation=resolve("artifacts.latest_observation", artifacts["latest_observation"]),
     )
@@ -270,6 +387,20 @@ def load_runtime_config(
         artifacts=artifact_config,
         policy=PolicyConfig(**policy),
         fixed_action=FixedActionConfig(**fixed_action),
+        manual_jog=ManualJogConfig(
+            enabled=manual_jog["enabled"],
+            allowed_actuators=tuple(allowed_actuators),
+            speed_fraction=speed_fraction,
+            command_period_ms=command_period_ms,
+            heartbeat_timeout_ms=heartbeat_timeout_ms,
+            max_hold_ms=max_hold_ms,
+            position_margin_m=position_margin_m,
+        ),
+        follow_control=FollowControlConfig(
+            mode=follow_control["mode"],
+            allowed_actuators=tuple(follow_allowed_actuators),
+            heartbeat_timeout_ms=follow_heartbeat_timeout_ms,
+        ),
         diagnostics=DiagnosticsConfig(**diagnostics),
         action_journal=ActionJournalConfig(
             directory=resolve("action_journal.directory", action_journal["directory"]),

@@ -30,6 +30,7 @@ def valid_planning_payload():
             "max_obstacles": 1000,
         },
         "planner": {
+            "execution_workspace_mode": "disabled_by_operator",
             "collision_radius_m": 0.05,
             "step_size_m": 0.2,
             "edge_check_step_m": 0.04,
@@ -116,6 +117,19 @@ class PlanningProfileTest(unittest.TestCase):
         self.assertEqual(profile.outputs.directory, project_root / "runtime/live")
         self.assertEqual(profile.obstacle_adapter.bounds, (-1.5, 3.0, -0.42, 1.0, -0.5, 4.0))
         self.assertEqual(profile.planner.bounds, (-2.0, 3.0, -0.8, 1.0, -0.5, 4.0))
+        self.assertEqual(profile.planner.execution_workspace_mode, "disabled_by_operator")
+
+    def test_rejects_unknown_execution_workspace_mode(self):
+        data = valid_planning_payload()
+        data["planner"]["execution_workspace_mode"] = "ignore_everything"
+
+        with tempfile.TemporaryDirectory() as directory:
+            project_root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "execution_workspace_mode"):
+                load_planning_profile(
+                    write_profile_pair(project_root, planning_data=data),
+                    project_root=project_root,
+                )
 
     def test_rejects_unknown_profile_fields(self):
         data = valid_planning_payload()

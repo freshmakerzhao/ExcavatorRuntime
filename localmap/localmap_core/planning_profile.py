@@ -57,6 +57,7 @@ class ObstacleAdapterSettings:
 @dataclass(frozen=True)
 class PlannerSettings:
     bounds: tuple[float, float, float, float, float, float]
+    execution_workspace_mode: str
     collision_radius_m: float
     step_size_m: float
     edge_check_step_m: float
@@ -161,6 +162,7 @@ def load_planning_profile(
         "planner",
         data["planner"],
         {
+            "execution_workspace_mode",
             "collision_radius_m",
             "step_size_m",
             "edge_check_step_m",
@@ -180,6 +182,14 @@ def load_planning_profile(
     freshness = data["freshness"]
     obstacle_adapter = data["obstacle_adapter"]
     planner = data["planner"]
+    if planner["execution_workspace_mode"] not in {
+        "field_validated",
+        "disabled_by_operator",
+    }:
+        raise PlanningProfileError(
+            "planner.execution_workspace_mode 必须是 field_validated 或 "
+            "disabled_by_operator"
+        )
     _require_int("freshness.local_map_max_age_ms", freshness["local_map_max_age_ms"], 1, 60000)
     _require_int("freshness.bucket_tip_max_age_ms", freshness["bucket_tip_max_age_ms"], 1, 60000)
     _require_number("freshness.octomap_timeout_s", freshness["octomap_timeout_s"], 0.1, 60.0)
@@ -269,6 +279,7 @@ def load_planning_profile(
         ),
         planner=PlannerSettings(
             bounds=perception.local_map.bounds,
+            execution_workspace_mode=planner["execution_workspace_mode"],
             collision_radius_m=planner["collision_radius_m"],
             step_size_m=planner["step_size_m"],
             edge_check_step_m=planner["edge_check_step_m"],

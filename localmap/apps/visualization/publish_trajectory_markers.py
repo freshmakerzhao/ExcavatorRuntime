@@ -66,14 +66,23 @@ class TrajectoryMarkerPublisher(Node):
         self.trajectory: dict | None = None
         self.last_mtime_ns: int | None = None
         self.publisher = self.create_publisher(MarkerArray, topic, 1)
+        self.missing_file_cleared = False
         self.timer = self.create_timer(1.0 / max(rate_hz, 0.1), self.publish_markers)
         self.get_logger().info(f"publishing trajectory markers: {trajectory_path} -> {topic}")
 
     def reload_if_changed(self) -> bool:
         """轨迹文件变化时重新读取，便于RViz持续显示最新规划路径。"""
         if not self.trajectory_path.exists():
+            if not self.missing_file_cleared:
+                marker = Marker()
+                marker.action = Marker.DELETEALL
+                self.publisher.publish(MarkerArray(markers=[marker]))
+                self.missing_file_cleared = True
+                self.trajectory = None
+                self.last_mtime_ns = None
             self.get_logger().warning(f"trajectory文件不存在，等待生成: {self.trajectory_path}", throttle_duration_sec=5.0)
             return False
+        self.missing_file_cleared = False
         mtime_ns = self.trajectory_path.stat().st_mtime_ns
         if self.trajectory is not None and self.last_mtime_ns == mtime_ns:
             return True

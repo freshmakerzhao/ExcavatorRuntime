@@ -26,6 +26,22 @@ _SOURCE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _STOP = object()
 
 
+def _endpoint_lock_path(destination: tuple[str, int]) -> tuple[Path, str, int]:
+    """Return a process-independent lock path for one PC->Orin UDP endpoint."""
+    host, port = destination
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65_535:
+        raise ValueError(f"destination port必须是1..65535整数，实际为 {port!r}")
+    try:
+        canonical_host = socket.gethostbyname(host)
+    except OSError as exc:
+        raise ValueError(f"无法解析动作目标主机 {host!r}: {exc}") from exc
+    endpoint_key = f"{canonical_host}:{port}"
+    endpoint_digest = hashlib.sha256(endpoint_key.encode("utf-8")).hexdigest()
+    lock_dir = Path.home() / ".cache" / "airy_excavator" / "command_sink_locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    return lock_dir / f"endpoint.{endpoint_digest}.lock", canonical_host, port
+
+
 class ActionJournalUnavailable(RuntimeError):
     """发送审计不可用；调用方必须停止继续发送动作。"""
 
@@ -55,6 +71,19 @@ class RecordedUdpSender:
         self._max_file_bytes = journal_config.max_file_bytes
         self._retained_files = journal_config.retained_files
         self._journal_dir.mkdir(parents=True, exist_ok=True)
+        lock_path, canonical_host, canonical_port = _endpoint_lock_path(destination)
+        self._command_sink_lock = lock_path.open("a+b")
+        try:
+            fcntl.flock(
+                self._command_sink_lock.fileno(),
+                fcntl.LOCK_EX | fcntl.LOCK_NB,
+            )
+        except BlockingIOError as exc:
+            self._command_sink_lock.close()
+            raise ActionJournalUnavailable(
+                "Command Sink is already owned for endpoint "
+                f"{canonical_host}:{canonical_port}"
+            ) from exc
         started_at = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
         self._session_name = f"{source}.{started_at}.{os.getpid()}"
         self._part_index = 0
@@ -102,6 +131,7 @@ class RecordedUdpSender:
         self._writer.join(timeout=5.0)
         if self._writer.is_alive():
             self._set_failure("action journal写线程未能在5秒内关闭")
+        self._release_command_sink_lock()
         self._raise_if_failed()
 
     def __enter__(self) -> RecordedUdpSender:
@@ -226,6 +256,13 @@ class RecordedUdpSender:
             raise ActionJournalUnavailable(
                 self._failure_message or "action journal不可用"
             )
+
+    def _release_command_sink_lock(self) -> None:
+        lock = getattr(self, "_command_sink_lock", None)
+        if lock is None or lock.closed:
+            return
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        lock.close()
 
     def _set_failure(self, message: str) -> None:
         if self._writer_failed.is_set():

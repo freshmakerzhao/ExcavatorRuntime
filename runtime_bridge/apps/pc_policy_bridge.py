@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PC 侧闭环 policy bridge：Orin 状态 + FK/规划观测 -> ONNX 动作 -> Orin。"""
+"""PC侧ONNX诊断：Orin状态 + FK/规划观测 -> 候选动作；绝不发送UDP动作。"""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from runtime_bridge.fixed_actions import physical_velocity_action_from_normalized
-from runtime_bridge.action_journal import ActionJournalUnavailable, RecordedUdpSender
 from runtime_bridge.observation import (
     BucketTipObservation,
     ObservationBuilder,
@@ -30,7 +29,6 @@ from runtime_bridge.protocol import (
     PacketDecodeError,
     PolicyActionPacket,
     decode_packet,
-    encode_packet,
     estimate_remote_now_ms,
     make_zero_action,
     now_ms,
@@ -42,14 +40,9 @@ from runtime_bridge.unity_observation_adapter import UnityObservationAdapter
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """构造 policy bridge 参数。"""
-    parser = argparse.ArgumentParser(description="加载ONNX策略，接收Orin状态并回传4维动作。")
+    parser = argparse.ArgumentParser(description="加载ONNX策略，接收Orin状态并计算候选动作。")
     parser.add_argument("--config", type=Path, default=DEFAULT_RUNTIME_CONFIG, help="运行配置JSON")
     parser.add_argument("--task-mode", default="MoveToDig", choices=("MoveToDig", "CarryMaterial"), help="任务模式")
-    parser.add_argument(
-        "--enable-motion",
-        action="store_true",
-        help="显式允许向Orin发送UDP动作；默认只推理和打印",
-    )
     return parser
 
 
@@ -70,6 +63,7 @@ class RuntimeRosIo:
         self.rclpy = rclpy
         self.JointState = JointState
         self.latest_bucket_tip: BucketTipObservation | None = None
+        self.latest_swing_joint_rad = 0.0
         self.unity_observation_adapter = UnityObservationAdapter()
         rclpy.init(args=None)
         self.node = Node("pc_policy_bridge")
@@ -107,12 +101,14 @@ class RuntimeRosIo:
                     message.pose.orientation.w,
                 ),
                 stamp_ms=stamp_ms,
+                swing_joint_rad=self.latest_swing_joint_rad,
             )
         except ValueError as exc:
             self.node.get_logger().warning(f"drop invalid right-handed bucket tip pose: {exc}")
 
     def publish_joint_states(self, state: MachineStatePacket) -> None:
         """把 Orin 关节角发布给 FK 节点，驱动 bucket tip 更新。"""
+        self.latest_swing_joint_rad = float(state.joint_position_rad["swing"])
         message = self.JointState()
         set_ros_header_stamp(message.header, state.stamp_ms)
         message.name = ["swing_joint", "boom_joint", "arm_joint", "bucket_joint"]
@@ -183,15 +179,15 @@ def denormalize_policy_action(action: Sequence[float], machine_profile: dict) ->
     return physical_velocity_action_from_normalized(action, machine_profile)
 
 
-def write_latest_observation(path: Path, observation: list[float], action: list[float], sent_action: PolicyActionPacket) -> None:
-    """写出最近一次 observation/action，方便人工核查 ONNX 输入输出。"""
+def write_latest_observation(path: Path, observation: list[float], action: list[float], candidate_action: PolicyActionPacket) -> None:
+    """写出最近一次observation和未发送候选动作，方便人工核查。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "stamp_ms": now_ms(),
         "observation_schema": "scale_excavator_v2_38d",
         "observation": observation,
         "policy_action": action,
-        "sent_action": sent_action.to_dict(),
+        "candidate_action": candidate_action.to_dict(),
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -213,25 +209,7 @@ def main() -> int:
 
     recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     recv_sock.bind(config.network.state_endpoint)
-    send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     action_destination = config.network.action_endpoint
-    try:
-        action_sender = (
-            RecordedUdpSender(
-                send_sock,
-                action_destination,
-                journal_config=config.action_journal,
-                source="pc_policy_bridge",
-            )
-            if args.enable_motion
-            else None
-        )
-    except OSError as exc:
-        print(f"policy action journal startup failed: {exc}", file=sys.stderr, flush=True)
-        ros_io.close()
-        recv_sock.close()
-        send_sock.close()
-        return 2
     previous_policy_action = [0.0, 0.0, 0.0, 0.0]
     state_count = 0
     action_seq = 0
@@ -239,9 +217,8 @@ def main() -> int:
 
     print(
         "pc policy bridge started: "
-        f"state <- {config.network.state_endpoint}, action -> {action_destination}, "
-        f"onnx={config.artifacts.onnx}, enable_motion={args.enable_motion}, task_mode={args.task_mode}, "
-        f"action_journal={action_sender.journal_path if action_sender else 'disabled'}",
+        f"state <- {config.network.state_endpoint}, candidate action for {action_destination}, "
+        f"onnx={config.artifacts.onnx}, motion_output=disabled, task_mode={args.task_mode}",
         flush=True,
     )
 
@@ -294,7 +271,7 @@ def main() -> int:
                 if config.network.action_time_source == "orin"
                 else now_ms()
             )
-            sent_packet = (
+            candidate_packet = (
                 make_policy_action(
                     action_seq,
                     actuator_velocity_action,
@@ -310,16 +287,14 @@ def main() -> int:
                 )
             )
             if not send_policy:
-                sent_packet = make_policy_action(
+                candidate_packet = make_policy_action(
                     action_seq,
-                    sent_packet.action,
+                    candidate_packet.action,
                     config.network.action_valid_ms,
                     "normalized_velocity_command",
                     stamp_ms=action_stamp_ms,
                 )
 
-            if args.enable_motion:
-                action_sender.send(encode_packet(sent_packet))
             previous_policy_action = list(policy_action) if send_policy else [0.0, 0.0, 0.0, 0.0]
             action_seq += 1
 
@@ -328,30 +303,20 @@ def main() -> int:
                     config.artifacts.latest_observation,
                     observation,
                     policy_action,
-                    sent_packet,
+                    candidate_packet,
                 )
             if config.diagnostics.print_every > 0 and state_count % config.diagnostics.print_every == 0:
                 print(
                     f"state[{state_count}] seq={packet.seq} obs[9:12]={observation[9:12]} "
-                    f"pitch={observation[34]:.3f} policy={policy_action} sent={sent_packet.action} "
-                    f"action_stamp={sent_packet.stamp_ms} state_stamp={packet.stamp_ms} reason={reason}",
+                    f"pitch={observation[34]:.3f} policy={policy_action} candidate={candidate_packet.action} "
+                    f"action_stamp={candidate_packet.stamp_ms} state_stamp={packet.stamp_ms} reason={reason}",
                     flush=True,
                 )
     except KeyboardInterrupt:
         print("pc policy bridge stopped", flush=True)
-    except ActionJournalUnavailable as exc:
-        print(f"pc policy bridge stopped: {exc}", file=sys.stderr, flush=True)
-        exit_code = 3
     finally:
         ros_io.close()
-        if action_sender is not None:
-            try:
-                action_sender.close()
-            except ActionJournalUnavailable as exc:
-                print(f"pc policy bridge journal close failed: {exc}", file=sys.stderr, flush=True)
-                exit_code = 3
         recv_sock.close()
-        send_sock.close()
     return exit_code
 
 

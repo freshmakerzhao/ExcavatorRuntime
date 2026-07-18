@@ -37,12 +37,14 @@ class UnityObservationAdapter:
         position_m: Sequence[float],
         orientation_xyzw: Sequence[float],
         stamp_ms: int,
+        swing_joint_rad: float = 0.0,
     ) -> BucketTipObservation:
         """适配带源时间的 ROS PoseStamped 内容为 Unity training tip 片段。
 
-        FK 的现有 pitch 契约是 bucket_tip 局部 +Z 与 ROS 根 +Z 的无符号夹角。
-        对单位四元数，该点积为 ``1 - 2 * (qx² + qy²)``。从同一 PoseStamped
-        取位置、姿态和 header stamp，避免旧 Float32 数组丢失源时间的问题。
+        Unity 训练契约用 bucket reference 局部 forward 相对 swing frame
+        forward 的有符号 pitch。ROS URDF 中 Unity forward 对应 bucket_tip
+        局部 +X，swing_joint 绕 -Z 旋转；因此先消除 swing，再在
+        swing XZ 平面内绕 +Y 求有符号角。
         """
         if len(orientation_xyzw) != 4:
             raise ValueError("ROS quaternion 必须恰好包含4个分量")
@@ -50,11 +52,21 @@ class UnityObservationAdapter:
         norm = math.sqrt(sum(value * value for value in quaternion))
         if norm <= 1e-9:
             raise ValueError("ROS quaternion 不能为零")
-        qx, qy = quaternion[0] / norm, quaternion[1] / norm
-        z_dot = max(-1.0, min(1.0, 1.0 - 2.0 * (qx * qx + qy * qy)))
+        qx, qy, qz, qw = (value / norm for value in quaternion)
+        # First rotation-matrix column: bucket_tip local +X in machine_root_ros.
+        bucket_x = 1.0 - 2.0 * (qy * qy + qz * qz)
+        bucket_y = 2.0 * (qx * qy + qw * qz)
+        bucket_z = 2.0 * (qx * qz - qw * qy)
+        swing = float(swing_joint_rad)
+        if not math.isfinite(swing):
+            raise ValueError("swing_joint_rad must be finite")
+        # URDF swing axis is -Z, so machine<-swing is Rz(-swing).
+        cosine, sine = math.cos(swing), math.sin(swing)
+        bucket_x_in_swing = cosine * bucket_x - sine * bucket_y
+        pitch_rad = math.atan2(-bucket_z, bucket_x_in_swing)
         return BucketTipObservation(
             position_m=self.position_to_unity(position_m),
-            pitch_rad=math.acos(z_dot),
+            pitch_rad=pitch_rad,
             stamp_ms=int(stamp_ms),
         )
 

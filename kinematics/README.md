@@ -34,8 +34,8 @@ source install/setup.bash
 ros2 launch waji_description display.launch.py
 ```
 
-这不会发送控制命令。不要在真机 ROS domain 中启动 `slider.launch.py` 或任何手工
-`/joint_states` publisher。
+这不会发送控制命令。真机 ROS domain 中不得启用 RViz Panel 的 embedded joint tests 或
+任何手工 `/joint_states` publisher。
 
 验收只看右手话题：
 

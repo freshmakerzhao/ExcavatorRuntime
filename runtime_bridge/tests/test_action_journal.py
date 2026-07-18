@@ -152,7 +152,7 @@ class ActionJournalTest(unittest.TestCase):
             sender_socket.close()
             receiver.close()
 
-    def test_retention_does_not_unlink_another_active_sender(self):
+    def test_second_active_command_sink_is_refused(self):
         first_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         second_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -169,16 +169,44 @@ class ActionJournalTest(unittest.TestCase):
                 ) as first:
                     first.send(encode_packet(make_zero_action(0, 100, stamp_ms=1)))
                     self._wait_until(lambda: first.journal_path.stat().st_size > 0)
-                    with RecordedUdpSender(
-                        second_socket,
-                        receiver.getsockname(),
-                        journal_config=config,
-                        source="second_sender",
-                    ) as second:
-                        second.send(encode_packet(make_zero_action(1, 100, stamp_ms=2)))
-                        self._wait_until(lambda: second.journal_path.stat().st_size > 0)
-                        self.assertTrue(first.journal_path.exists())
-                        self.assertTrue(second.journal_path.exists())
+                    with self.assertRaisesRegex(
+                        ActionJournalUnavailable, "Command Sink is already owned"
+                    ):
+                        RecordedUdpSender(
+                            second_socket,
+                            receiver.getsockname(),
+                            journal_config=config,
+                            source="second_sender",
+                        )
+                    self.assertTrue(first.journal_path.exists())
+        finally:
+            first_socket.close()
+            second_socket.close()
+            receiver.close()
+
+    def test_different_journal_directory_cannot_bypass_endpoint_ownership(self):
+        first_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        second_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        receiver.bind(("127.0.0.1", 0))
+
+        try:
+            with tempfile.TemporaryDirectory() as first_directory, tempfile.TemporaryDirectory() as second_directory:
+                with RecordedUdpSender(
+                    first_socket,
+                    receiver.getsockname(),
+                    journal_config=journal_config(first_directory),
+                    source="first_sender",
+                ):
+                    with self.assertRaisesRegex(
+                        ActionJournalUnavailable, "Command Sink is already owned"
+                    ):
+                        RecordedUdpSender(
+                            second_socket,
+                            receiver.getsockname(),
+                            journal_config=journal_config(second_directory),
+                            source="second_sender",
+                        )
         finally:
             first_socket.close()
             second_socket.close()

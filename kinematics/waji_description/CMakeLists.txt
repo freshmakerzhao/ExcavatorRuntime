@@ -8,9 +8,6 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_calibrated_urdf_contract
     test/test_calibrated_urdf_contract.py
   )
-  ament_add_pytest_test(test_joint_slider_contract
-    test/test_joint_slider_contract.py
-  )
 endif()
 
 install(
@@ -21,7 +18,6 @@ install(
 install(
   PROGRAMS
     scripts/bucket_tip_pose_publisher.py
-    scripts/waji_joint_slider.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

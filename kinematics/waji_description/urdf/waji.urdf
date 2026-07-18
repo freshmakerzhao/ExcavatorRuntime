@@ -160,7 +160,7 @@
     type="revolute">
     <origin
       xyz="0.05 0 0"
-      rpy="0 0.43 0" />
+      rpy="0 0.52 0" />
     <parent
       link="swing_link" />
     <child
@@ -218,7 +218,7 @@
     type="revolute">
     <origin
       xyz="0.78 0 0"
-      rpy="0 3.31 0" />
+      rpy="0 2.95 0" />
     <parent
       link="boom_link" />
     <child
@@ -276,7 +276,7 @@
     type="revolute">
     <origin
       xyz="0.35 0 0"
-      rpy="0 3.48 0" />
+      rpy="0 2.74 0" />
     <parent
       link="arm_link" />
     <child

@@ -70,6 +70,9 @@
         },
         "confidence": {
           "$ref": "#/$defs/confidence"
+        },
+        "mission": {
+          "$ref": "#/$defs/mission_reference"
         }
       }
     },
@@ -114,6 +117,16 @@
       "type": "number",
       "minimum": 0.0,
       "maximum": 1.0
+    },
+    "mission_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256", "phase"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "phase": {"enum": ["dig", "dump"]}
+      }
     },
     "vec3": {
       "type": "array",

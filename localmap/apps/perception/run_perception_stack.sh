@@ -3,6 +3,7 @@
 set -eo pipefail
 
 AIRY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+source "${AIRY_ROOT}/localmap/apps/perception/process_lifecycle.sh"
 
 # 关键：ROS setup脚本不适合在set -u开启前source。
 source /opt/ros/jazzy/setup.bash
@@ -25,10 +26,20 @@ RUN_LIVE_LOCAL_MAP="${RUN_LIVE_LOCAL_MAP:-1}"
 RUN_OCTOMAP="${RUN_OCTOMAP:-1}"
 RUN_REACHABLE_WORKSPACE_MARKERS="${RUN_REACHABLE_WORKSPACE_MARKERS:-${DEFAULT_REACHABLE_WORKSPACE_MARKERS}}"
 RUN_TRAJECTORY_MARKERS="${RUN_TRAJECTORY_MARKERS:-0}"
-RUN_BUCKET_TIP_BRIDGE="${RUN_BUCKET_TIP_BRIDGE:-0}"
+RUN_BUCKET_TIP_BRIDGE="${RUN_BUCKET_TIP_BRIDGE:-1}"
+REPLAY_RESTAMP_CLOUD="${REPLAY_RESTAMP_CLOUD:-0}"
 TRAJECTORY_JSON="${TRAJECTORY_JSON:-${AIRY_ROOT}/localmap/exports/live_latest/trajectory_command.simple_rrt.json}"
 REACHABLE_WORKSPACE_JSON="${REACHABLE_WORKSPACE_JSON:-${AIRY_ROOT}/localmap/config/reachable_workspace.machine_root_ros.derived.v1.json}"
 WORKSPACE_MODE="${WORKSPACE_MODE:-MoveToDig}"
+
+if [[ "${REPLAY_RESTAMP_CLOUD}" != "0" && "${REPLAY_RESTAMP_CLOUD}" != "1" ]]; then
+  echo "错误：REPLAY_RESTAMP_CLOUD只能是0或1，实际为${REPLAY_RESTAMP_CLOUD}" >&2
+  exit 2
+fi
+if [[ "${REPLAY_RESTAMP_CLOUD}" == "1" && "${RUN_RSLIDAR}" != "0" ]]; then
+  echo "错误：REPLAY_RESTAMP_CLOUD=1仅允许离线rosbag，必须同时设置RUN_RSLIDAR=0" >&2
+  exit 2
+fi
 
 PIDS=()
 PID_NAMES=()
@@ -75,21 +86,17 @@ start_process() {
   shift
   local log_path="${AIRY_ROOT}/runtime/logs/${name}.log"
   echo "启动 ${name}，日志: ${log_path}"
-  "$@" >"${log_path}" 2>&1 &
+  setsid "$@" >"${log_path}" 2>&1 &
   PIDS+=("$!")
   PID_NAMES+=("${name}")
 }
 
 cleanup() {
   echo "正在关闭感知栈..."
-  for pid in "${PIDS[@]}"; do
-    kill "${pid}" >/dev/null 2>&1 || true
-  done
-  for pid in "${PIDS[@]}"; do
-    wait "${pid}" >/dev/null 2>&1 || true
-  done
+  terminate_processes 2 "${PIDS[@]}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 0' INT TERM
 
 if [[ "${RUN_RSLIDAR}" == "1" ]]; then
   check_rslidar_host_address
@@ -99,11 +106,16 @@ if [[ "${RUN_RSLIDAR}" == "1" ]]; then
 fi
 
 if [[ "${RUN_TRANSFORM}" == "1" ]]; then
+  TRANSFORM_REPLAY_ARGS=()
+  if [[ "${REPLAY_RESTAMP_CLOUD}" == "1" ]]; then
+    TRANSFORM_REPLAY_ARGS+=(--restamp-for-replay)
+  fi
   start_process live_cloud_transform \
     /usr/bin/python3 "${AIRY_ROOT}/localmap/scripts/transform_live_cloud_to_base.py" \
-    --input-topic /rslidar_points \
+      --input-topic /rslidar_points \
       --output-topic "${MACHINE_CLOUD_TOPIC}" \
-      --extrinsics "${EXTRINSICS}"
+      --extrinsics "${EXTRINSICS}" \
+      "${TRANSFORM_REPLAY_ARGS[@]}"
 fi
 
 if [[ "${RUN_LIVE_LOCAL_MAP}" == "1" ]]; then
@@ -168,6 +180,7 @@ cat <<EOF
 
 感知栈已启动。
 目标 ROS 根：${MACHINE_ROOT_FRAME}
+Replay重打时间戳：${REPLAY_RESTAMP_CLOUD}（仅rosbag离线回放可设为1）
 常用检查：
   ros2 topic list | grep -E 'rslidar|machine_root|octomap|occupied|reachable'
   ros2 topic hz ${MACHINE_CLOUD_TOPIC}

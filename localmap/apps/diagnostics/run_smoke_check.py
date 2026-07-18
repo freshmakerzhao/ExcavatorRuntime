@@ -18,6 +18,7 @@ APP_PATH = Path(__file__).resolve()
 LOCALMAP_DIR = APP_PATH.parents[2]
 PROJECT_ROOT = LOCALMAP_DIR.parent
 DEFAULT_EXPORT_DIR = LOCALMAP_DIR / "exports" / "live_latest"
+DEFAULT_MISSION = PROJECT_ROOT / "mission" / "config" / "excavation_cycle.json"
 
 
 @dataclass(frozen=True)
@@ -45,10 +46,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bucket-tip-json", type=Path, help="bucket tip live JSON路径")
     parser.add_argument("--skip-ros", action="store_true", help="跳过ROS topic检查，只检查JSON文件")
     parser.add_argument(
-        "--run-planning",
-        metavar="TARGET_ID",
-        help="对指定LocalMap目标运行一次规划，再检查轨迹文件",
+        "--run-planning-phase",
+        choices=("dig", "dump"),
+        help="对Mission的指定阶段运行一次非执行全局预览，再检查轨迹文件",
     )
+    parser.add_argument("--mission", type=Path, default=DEFAULT_MISSION)
     parser.add_argument("--require-trajectory", action="store_true", help="缺少轨迹文件时判定为失败；默认只警告")
     parser.add_argument("--topic-timeout-s", type=float, default=5.0, help="topic hz采样超时时间")
     parser.add_argument("--min-point-rate-hz", type=float, default=1.0, help="点云topic最低期望频率")
@@ -193,12 +195,24 @@ def check_topic_rate(topic: str, timeout_s: float, min_rate_hz: float) -> CheckR
     return CheckResult(f"Rate {topic}", "pass", f"{rate:.2f} Hz")
 
 
-def run_planning_once(target_id: str) -> CheckResult:
-    """运行一次规划脚本；用于需要端到端验证时显式打开。"""
+def run_planning_once(phase: str, mission_path: Path = DEFAULT_MISSION) -> CheckResult:
+    """运行一次Mission非执行预览；用于端到端 smoke。"""
     script = PROJECT_ROOT / "localmap" / "scripts" / "run_planning_once.sh"
     env = os.environ.copy()
     try:
-        process = run_process([str(script), target_id], timeout_s=60.0, env=env)
+        process = run_process(
+            [
+                str(script),
+                "--mission",
+                str(mission_path),
+                "--phase",
+                phase,
+                "--planning-scope",
+                "preview_global",
+            ],
+            timeout_s=60.0,
+            env=env,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         return CheckResult("Run planning once", "fail", f"规划脚本执行失败: {exc}")
     if process.returncode != 0:
@@ -236,8 +250,14 @@ def build_checks(args: argparse.Namespace) -> list[CheckResult]:
     results.append(check_bucket_tip_json(bucket_tip_json, args.expected_frame))
 
     require_trajectory = args.require_trajectory
-    if args.run_planning is not None:
-        results.append(run_planning_once(args.run_planning))
+    if args.run_planning_phase is not None:
+        results.append(run_planning_once(args.run_planning_phase, args.mission))
+        if args.trajectory_json is None:
+            trajectory_json = (
+                export_dir.parent
+                / "live_preview"
+                / "trajectory_command.preview_global.json"
+            )
         require_trajectory = True
     results.append(check_trajectory_json(trajectory_json, args.expected_frame, required=require_trajectory))
     return results

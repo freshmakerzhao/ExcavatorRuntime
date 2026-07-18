@@ -13,7 +13,9 @@
     "waypoints_base",
     "waypoint_count",
     "target_threshold",
-    "tube_radius"
+    "tube_radius",
+    "planning_scope",
+    "execution_eligible"
   ],
   "properties": {
     "schema_version": {
@@ -54,8 +56,50 @@
     "tube_radius": {
       "type": "number",
       "exclusiveMinimum": 0.0
+    },
+    "planning_scope": {
+      "type": "string",
+      "enum": [
+        "preview_global",
+        "workspace_strict",
+        "execution_strict"
+      ]
+    },
+    "execution_eligible": {
+      "type": "boolean"
+    },
+    "mission": {
+      "$ref": "#/$defs/mission_reference"
+    },
+    "planner": {
+      "type": "object"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "planning_scope": {
+            "const": "execution_strict"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "execution_eligible": {
+            "const": true
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "execution_eligible": {
+            "const": false
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "vec3": {
       "type": "array",
@@ -72,6 +116,16 @@
       ],
       "minItems": 3,
       "maxItems": 3
+    },
+    "mission_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256", "phase"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "phase": {"enum": ["dig", "dump"]}
+      }
     }
   }
 }

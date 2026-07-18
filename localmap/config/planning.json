@@ -16,6 +16,7 @@
     "max_obstacles": 1000
   },
   "planner": {
+    "execution_workspace_mode": "disabled_by_operator",
     "collision_radius_m": 0.05,
     "step_size_m": 0.2,
     "edge_check_step_m": 0.04,

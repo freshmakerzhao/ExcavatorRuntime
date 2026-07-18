@@ -1,0 +1,30 @@
+{
+  "schema_version": "mission_replay.v1",
+  "frame_id": "machine_root_ros",
+  "to_dig": {
+    "waypoints": [[0.0, 0.0, 0.0], [0.6, -0.3, -0.4]],
+    "tip_samples": [
+      {"time_s": 0.0, "position_m": [0.0, 0.0, 0.0]},
+      {"time_s": 0.3, "position_m": [0.0, 0.0, 0.0]},
+      {"time_s": 0.4, "position_m": [0.6, -0.3, -0.4]},
+      {"time_s": 0.7, "position_m": [0.6, -0.3, -0.4]}
+    ]
+  },
+  "dig_settle_duration_s": 0.5,
+  "dig_primitive_result": "completed",
+  "load_verification_result": "passed",
+  "post_dig_bucket_tip_m": [0.55, -0.25, -0.2],
+  "to_dump": {
+    "waypoints": [[0.55, -0.25, -0.2], [0.45, 0.3, 0.1]],
+    "tip_samples": [
+      {"time_s": 1.0, "position_m": [0.55, -0.25, -0.2]},
+      {"time_s": 1.3, "position_m": [0.55, -0.25, -0.2]},
+      {"time_s": 1.4, "position_m": [0.45, 0.3, 0.1]},
+      {"time_s": 1.7, "position_m": [0.45, 0.3, 0.1]}
+    ]
+  },
+  "dump_settle_duration_s": 0.5,
+  "dump_primitive_result": "completed",
+  "empty_verification_result": "passed",
+  "return_home_result": "completed"
+}

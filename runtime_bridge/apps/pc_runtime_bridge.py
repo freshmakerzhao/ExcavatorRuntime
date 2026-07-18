@@ -23,11 +23,26 @@ from runtime_bridge.protocol import (
     make_zero_action,
 )
 from runtime_bridge.action_journal import ActionJournalUnavailable, RecordedUdpSender
+from runtime_bridge.live_control import evaluate_actuator_state
+from runtime_bridge.observation import load_machine_profile
 from runtime_bridge.runtime_config import DEFAULT_RUNTIME_CONFIG, load_runtime_config
 from runtime_bridge.ros_provenance import set_ros_header_stamp
 
 
 DEFAULT_LATEST_STATE = PROJECT_ROOT / "runtime_bridge" / "exports" / "latest_state.json"
+
+
+def non_negative_int(value: str) -> int:
+    """解析允许0的包计数间隔。"""
+    converted = int(value)
+    if converted < 0:
+        raise argparse.ArgumentTypeError("必须是大于等于0的整数")
+    return converted
+
+
+def should_print_state(state_count: int, print_every: int) -> bool:
+    """按有效状态包计数判断是否打印本包。"""
+    return print_every > 0 and state_count % print_every == 0
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -36,6 +51,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", type=Path, default=DEFAULT_RUNTIME_CONFIG, help="运行配置JSON")
     parser.add_argument("--reply-zero", action="store_true", help="每收到状态后回发四维零动作")
     parser.add_argument("--publish-joint-states", action="store_true", help="把状态包关节角发布为ROS2 /joint_states")
+    parser.add_argument(
+        "--print-every",
+        type=non_negative_int,
+        default=None,
+        help="每N个有效状态包打印一次；0关闭打印，默认读取runtime配置",
+    )
     return parser
 
 
@@ -83,7 +104,12 @@ class JointStatePublisher:
     def close(self) -> None:
         """关闭 ROS2 节点。"""
         self.node.destroy_node()
-        self.rclpy.shutdown()
+        if self.rclpy.ok():
+            self.rclpy.shutdown()
+
+    def warn(self, message: str) -> None:
+        """把 live-shadow 诊断写入 /rosout，供 RViz Panel Logs 显示。"""
+        self.node.get_logger().warning(message, throttle_duration_sec=2.0)
 
 
 def write_latest_state(path: Path, state: ExcavatorStatePacket | MachineStatePacket) -> None:
@@ -97,6 +123,8 @@ def main() -> int:
     args = build_arg_parser().parse_args()
     try:
         config = load_runtime_config(args.config)
+        config.artifacts.require_machine_profile()
+        machine_profile = load_machine_profile(config.artifacts.machine_profile)
     except (OSError, ValueError) as exc:
         print(f"runtime diagnostic configuration error: {exc}", file=sys.stderr, flush=True)
         return 2
@@ -122,6 +150,7 @@ def main() -> int:
         send_sock.close()
         return 2
     joint_state_publisher = JointStatePublisher() if args.publish_joint_states else None
+    print_every = config.diagnostics.print_every if args.print_every is None else args.print_every
 
     state_count = 0
     action_seq = 0
@@ -130,6 +159,7 @@ def main() -> int:
         "pc runtime diagnostic started: "
         f"state <- {config.network.state_endpoint}, action -> {action_destination}, "
         f"reply_zero={args.reply_zero}, publish_joint_states={args.publish_joint_states}, "
+        f"print_every={print_every}, "
         f"action_journal={action_sender.journal_path if action_sender else 'disabled'}",
         flush=True,
     )
@@ -150,13 +180,22 @@ def main() -> int:
                 write_latest_state(DEFAULT_LATEST_STATE, packet)
             if joint_state_publisher is not None:
                 joint_state_publisher.publish(packet)
+            actuator_decision = (
+                evaluate_actuator_state(packet, machine_profile)
+                if isinstance(packet, MachineStatePacket)
+                else None
+            )
+            if actuator_decision is not None and not actuator_decision.allowed:
+                message = f"PC motion model rejects actuator state: {actuator_decision.reason}"
+                if joint_state_publisher is not None:
+                    joint_state_publisher.warn(message)
             if args.reply_zero:
                 # 关键：零动作只用于链路联调，不代表最终 ONNX 输出。
                 action = make_zero_action(action_seq, valid_for_ms=config.network.action_valid_ms)
                 action_sender.send(encode_packet(action))
                 action_seq += 1
 
-            if config.diagnostics.print_every > 0 and state_count % config.diagnostics.print_every == 0:
+            if should_print_state(state_count, print_every):
                 age_ms = int(time.time() * 1000) - packet.stamp_ms
                 if isinstance(packet, MachineStatePacket):
                     # 关键：正式协议下把安全状态也打出来，方便联调时一眼看出为何不执行动作。
@@ -164,7 +203,8 @@ def main() -> int:
                     print(
                         f"state[{state_count}] from {address}: seq={packet.seq}, age={age_ms}ms, "
                         f"estop={safety['estop']}, sensor_valid={safety['sensor_valid']}, "
-                        f"control_enabled={safety['control_enabled']}, faults={safety['fault_flags']}",
+                        f"control_enabled={safety['control_enabled']}, faults={safety['fault_flags']}, "
+                        f"actuator_gate={actuator_decision.reason if actuator_decision else 'unavailable'}",
                         flush=True,
                     )
                 else:

@@ -2,7 +2,11 @@ import unittest
 from pathlib import Path
 
 from runtime_bridge.apps.inspect_orin_packets import extract_machine_state_packets, format_machine_state_packet
-from runtime_bridge.apps.pc_runtime_bridge import build_arg_parser
+from runtime_bridge.apps.pc_runtime_bridge import (
+    JointStatePublisher,
+    build_arg_parser,
+    should_print_state,
+)
 from runtime_bridge.ros_provenance import epoch_ms_to_ros_time_fields
 from runtime_bridge.runtime_config import load_runtime_config
 
@@ -11,15 +15,56 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class RuntimeAppsTest(unittest.TestCase):
+    def test_joint_state_publisher_close_is_idempotent_after_ros_signal_shutdown(self):
+        class FakeNode:
+            destroyed = False
+
+            def destroy_node(self):
+                self.destroyed = True
+
+        class AlreadyShutdownRclpy:
+            def ok(self):
+                return False
+
+            def shutdown(self):
+                raise AssertionError("shutdown must not be called twice")
+
+        publisher = object.__new__(JointStatePublisher)
+        publisher.node = FakeNode()
+        publisher.rclpy = AlreadyShutdownRclpy()
+
+        publisher.close()
+
+        self.assertTrue(publisher.node.destroyed)
+
+    def test_diagnostic_bridge_accepts_packet_print_interval_override(self):
+        args = build_arg_parser().parse_args(["--print-every", "100"])
+
+        self.assertEqual(args.print_every, 100)
+
+    def test_diagnostic_bridge_allows_zero_but_rejects_negative_print_interval(self):
+        parser = build_arg_parser()
+
+        self.assertEqual(parser.parse_args(["--print-every", "0"]).print_every, 0)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--print-every", "-1"])
+
+    def test_diagnostic_bridge_prints_only_on_requested_packet_boundaries(self):
+        self.assertFalse(should_print_state(9, 10))
+        self.assertTrue(should_print_state(10, 10))
+        self.assertTrue(should_print_state(100, 100))
+        self.assertFalse(should_print_state(100, 0))
+
     def test_diagnostic_bridge_exposes_only_runtime_intent(self):
         parser = build_arg_parser()
         defaults = parser.parse_args([])
 
         self.assertEqual(
             set(vars(defaults)),
-            {"config", "reply_zero", "publish_joint_states"},
+            {"config", "reply_zero", "publish_joint_states", "print_every"},
         )
         self.assertFalse(defaults.reply_zero)
+        self.assertIsNone(defaults.print_every)
         self.assertTrue(parser.parse_args(["--reply-zero"]).reply_zero)
 
     def test_shipped_mock_config_uses_loopback_network(self):

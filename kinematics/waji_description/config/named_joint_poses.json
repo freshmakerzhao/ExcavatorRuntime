@@ -1,0 +1,21 @@
+{
+  "schema_version": "named_joint_poses.v1",
+  "machine_id": "scale_excavator",
+  "urdf_sha256": "dcf5b64a538a739f3f6ae2b390e7e0bcd6de5cc5924edaefe446c5586632f6db",
+  "joint_order": [
+    "swing_joint",
+    "boom_joint",
+    "arm_joint",
+    "bucket_joint"
+  ],
+  "poses": {
+    "transport_home": {
+      "status": "placeholder",
+      "position_rad": [0.0, 0.0, 0.0, 0.0],
+      "tolerance_rad": 0.02,
+      "dwell_s": 0.3,
+      "timeout_s": 10.0,
+      "note": "Offline shadow placeholder only; requires field measurement before real execution."
+    }
+  }
+}

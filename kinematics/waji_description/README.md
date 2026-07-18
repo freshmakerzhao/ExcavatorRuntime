@@ -22,15 +22,16 @@ machine_root_ros -> fk_root -> base_link -> swing_link -> boom_link -> arm_link 
 `PoseStamped.header.stamp` 从 TF transform 原样复制，因而保持 `/joint_states` 的源时间。
 `/joint_states` 在生产运行时只由 state bridge 提供。`rviz.launch.py` 仅用于可视化。
 
-## 仅模型验证：Tk slider
+## 仅模型验证：RViz Panel Tests
 
-新 URDF 项目自带的 `slider.launch.py` 已保留，用于验证 URDF 关节轴和 RViz 随动；它会发布
-模拟 `/joint_states`，因此必须使用与真机不同的 ROS domain：
+独立 Tk slider 已移除，避免维护第二套 `/joint_states` 测试发布器。离线模型验证统一使用
+RViz Mission Panel 的 `Tests` 标签页；它只在隔离的 fixture/shadow launch 中显式启用：
 
 ```bash
-ROS_DOMAIN_ID=221 ros2 launch waji_description display.launch.py
-ROS_DOMAIN_ID=221 ros2 launch waji_description slider.launch.py
-ROS_DOMAIN_ID=221 ros2 launch waji_description rviz.launch.py
+ros2 launch airy_excavator_bringup operator.launch.py profile:=fixture_shadow
 ```
 
-三个命令分别在三个终端执行。严禁在真机 ROS domain 中运行 slider。
+`Tests` 提供 swing/boom/arm/bucket 四个滑块、弧度/角度显示、10 Hz 连续发布、单次发布和
+Reset。统一离线 launch 将测试流映射为 `/offline/joint_states`。Panel 默认不创建测试
+publisher；检测到 live、非 shadow、运动 Backend、动作发送器、非零数据报、状态过期或
+第二个同名 JointState publisher 时均禁止测试发布。

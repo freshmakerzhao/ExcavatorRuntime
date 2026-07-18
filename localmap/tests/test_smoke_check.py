@@ -16,10 +16,10 @@ SPEC.loader.exec_module(smoke)
 
 
 class SmokeCheckTest(unittest.TestCase):
-    def test_run_planning_option_requires_explicit_target_id(self):
-        args = smoke.build_arg_parser().parse_args(["--run-planning", "mock_dig_001"])
+    def test_run_planning_option_requires_explicit_mission_phase(self):
+        args = smoke.build_arg_parser().parse_args(["--run-planning-phase", "dig"])
 
-        self.assertEqual(args.run_planning, "mock_dig_001")
+        self.assertEqual(args.run_planning_phase, "dig")
 
     def test_local_map_frame_must_match_machine_root(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -108,14 +108,17 @@ class SmokeCheckTest(unittest.TestCase):
 
         self.assertEqual(smoke.exit_code_for_results(results), 1)
 
-    def test_planning_runner_receives_target_id(self):
+    def test_planning_runner_receives_mission_and_non_executable_scope(self):
         completed = smoke.subprocess.CompletedProcess([], returncode=0, stdout="", stderr="")
 
         with mock.patch.object(smoke, "run_process", return_value=completed) as run_process:
-            result = smoke.run_planning_once("mock_dig_001")
+            result = smoke.run_planning_once("dig")
 
         command = run_process.call_args.args[0]
-        self.assertEqual(command[-1], "mock_dig_001")
+        self.assertIn("--mission", command)
+        self.assertIn("--phase", command)
+        self.assertIn("dig", command)
+        self.assertEqual(command[-1], "preview_global")
         self.assertEqual(result.status, "pass")
 
 

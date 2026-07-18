@@ -1,0 +1,23 @@
+# Goal: one immutable Trajectory Snapshot. execution_mode is fixed by bringup.
+airy_excavator_interfaces/TrajectorySnapshot trajectory
+---
+# Result is published only after the selected backend is quiescent and the behavior lease is released.
+uint8 OUTCOME_SUCCEEDED=1
+uint8 OUTCOME_CANCELLED=2
+uint8 OUTCOME_FAILED=3
+uint8 outcome
+string reason_code
+string message
+uint32 final_waypoint_index
+float64 final_distance_m
+bool quiescence_confirmed
+uint64 action_datagrams
+---
+builtin_interfaces/Time bucket_tip_stamp
+geometry_msgs/Point bucket_tip
+uint32 current_waypoint_index
+uint32 waypoint_count
+float64 distance_m
+float64 elapsed_s
+string tracking_state
+uint64 action_datagrams

@@ -190,14 +190,21 @@ OCTOMAP_POINT_CLOUD_MAX_Z=4.0 \
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 
-localmap/scripts/run_planning_once.sh mock_dig_001
+localmap/scripts/run_planning_once.sh \
+  --mission mission/config/excavation_cycle.json \
+  --phase dig \
+  --planning-scope preview_global
 ```
 
-目标类型和任务模式由目标ID自动推导。规划边界、避障参数、输入输出路径和实时数据时效统一配置在
+目标坐标来自 Mission 文件，目标类型和任务模式由 `--phase` 唯一推导。规划边界、避障参数、输入输出路径和实时数据时效统一配置在
 `localmap/config/planning.json`。需要排查编排步骤时使用只读 dry-run：
 
 ```bash
-localmap/scripts/run_planning_once.sh mock_dig_001 --dry-run
+localmap/scripts/run_planning_once.sh \
+  --mission mission/config/excavation_cycle.json \
+  --phase dig \
+  --planning-scope preview_global \
+  --dry-run
 ```
 
 RViz 中查看规划路径时，单独运行轨迹 marker 发布节点：

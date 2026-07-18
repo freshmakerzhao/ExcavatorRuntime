@@ -1,0 +1,15 @@
+# Non-motion planning goal. Runtime profiles fix planner and map/input sources.
+airy_excavator_interfaces/TargetSnapshot target
+string planning_scope
+---
+uint8 OUTCOME_SUCCEEDED=1
+uint8 OUTCOME_CANCELLED=2
+uint8 OUTCOME_FAILED=3
+uint8 outcome
+string reason_code
+string message
+airy_excavator_interfaces/TrajectorySnapshot trajectory
+uint64 action_datagrams
+---
+string stage
+uint32 iterations

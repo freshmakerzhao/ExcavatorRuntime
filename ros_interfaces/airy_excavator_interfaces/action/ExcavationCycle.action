@@ -1,0 +1,16 @@
+airy_excavator_interfaces/TargetSnapshot dig_target
+airy_excavator_interfaces/TargetSnapshot dump_target
+---
+uint8 OUTCOME_SUCCEEDED=1
+uint8 OUTCOME_CANCELLED=2
+uint8 OUTCOME_FAILED=3
+uint8 outcome
+string reason_code
+string message
+string completed_stage
+bool quiescence_confirmed
+uint64 action_datagrams
+---
+string stage
+string message
+uint64 action_datagrams

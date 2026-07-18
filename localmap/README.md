@@ -34,6 +34,55 @@ RViz Fixed Frame 使用 `machine_root_ros`，主要话题：
 - `/localmap/bucket_tip_machine_root_ros_pose`
 - `/occupied_cells_vis_array`
 
+## 用 Mission 文件调整目标并预览路径
+
+唯一目标来源是 `mission/config/excavation_cycle.json`。其中 `dig.position_m` 是挖掘点，
+`dump.position_m` 是倾倒点，均为 `machine_root_ros` 右手坐标（米）。初始值只是占位值，
+在现场确认前保持 `target_status: "placeholder"`。
+
+1. 启动目标标记发布器；文件保存后 RViz 会自动刷新：
+
+   ```bash
+   cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
+   source /opt/ros/jazzy/setup.bash
+   source ros2_ws/install/setup.bash
+   /usr/bin/python3 mission/apps/publish_mission_markers.py
+   ```
+
+2. 对挖掘点运行全局预览规划：
+
+   ```bash
+   localmap/scripts/run_planning_once.sh \
+     --mission mission/config/excavation_cycle.json \
+     --phase dig \
+     --planning-scope preview_global
+   ```
+
+   倾倒点把 `--phase dig` 改为 `--phase dump`。`preview_global` 跳过 bucket-tip
+   可达域，但仍检查 live 输入新鲜度、frame、规划边界和碰撞。它只写入
+   `localmap/exports/live_preview/`，不生成策略 observation，不发送动作。
+
+3. 在另一个终端持续显示最新预览轨迹：
+
+   ```bash
+   /usr/bin/python3 localmap/scripts/publish_trajectory_markers.py \
+     --trajectory localmap/exports/live_preview/trajectory_command.preview_global.json \
+     --topic /localmap/preview_bucket_tip_markers
+   ```
+
+如果预览路径合理，再验证同一 Mission 目标是否位于真实可达域：
+
+```bash
+localmap/scripts/run_planning_once.sh \
+  --mission mission/config/excavation_cycle.json \
+  --phase dig \
+  --planning-scope workspace_strict
+```
+
+`workspace_strict` 会启用对应任务模式的可达域，但仍只写入独立的
+`localmap/exports/live_validation/`，不生成 observation slice、不发送动作，也不授权
+真机运动。第一阶段 Mission shadow/replay 入口见 `mission/README.md`。
+
 ## 重要边界
 
 - `extrinsics_rslidar_to_machine_root_ros.derived.v1.json` 和右手 target/workspace 由旧
