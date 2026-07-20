@@ -190,42 +190,21 @@ OCTOMAP_POINT_CLOUD_MAX_Z=4.0 \
 ```bash
 cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
 
-localmap/scripts/run_planning_once.sh
+localmap/scripts/run_planning_once.sh \
+  --mission mission/config/excavation_cycle.json \
+  --phase dig \
+  --planning-scope preview_global
 ```
 
-下面是展开后的手动命令，便于排查每一步：
+目标坐标来自 Mission 文件，目标类型和任务模式由 `--phase` 唯一推导。规划边界、避障参数、输入输出路径和实时数据时效统一配置在
+`localmap/config/planning.json`。需要排查编排步骤时使用只读 dry-run：
 
 ```bash
-cd /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar
-source /opt/ros/jazzy/setup.zsh
-source /home/zhaoshuai/workspace_uinty/RL_prj/AiryLidar/ros2_ws/install/setup.zsh
-
-/usr/bin/python3 localmap/scripts/export_octomap_markers_to_local_map.py \
-  --bounds -1.5 3.0 -0.42 1.0 -0.5 4.0 \
-  --box-size 0.20 \
-  --max-obstacles 1000 \
-  --output localmap/exports/live_latest/local_map.octomap_obstacles.json
-
-/usr/bin/python3 localmap/scripts/generate_rrt_request_from_local_map.py \
-  --local-map localmap/exports/live_latest/local_map.octomap_obstacles.json \
-  --bucket-tip localmap/config/bucket_tip.machine_root.measured.json \
-  --output localmap/exports/live_latest/rrt_star_request.octomap_obstacles.json
-
-/usr/bin/python3 localmap/scripts/generate_simple_rrt_trajectory_from_request.py \
-  --request localmap/exports/live_latest/rrt_star_request.octomap_obstacles.json \
-  --output localmap/exports/live_latest/trajectory_command.simple_rrt.json \
-  --bounds -1.5 3.0 -0.70 1.00 -0.5 4.0 \
-  --reachable-workspace /home/zhaoshuai/workspace_uinty/RL_prj/shared/reachable_workspaces/scale_excavator_workspace.json \
-  --workspace-mode MoveToDig \
-  --collision-radius 0.05 \
-  --mask-start-radius 0.15 \
-  --mask-goal-radius 0.45 \
-  --waypoint-count 5
-
-/usr/bin/python3 localmap/scripts/generate_observation_waypoint_slice.py \
-  --trajectory localmap/exports/live_latest/trajectory_command.simple_rrt.json \
-  --bucket-tip localmap/config/bucket_tip.machine_root.measured.json \
-  --output localmap/exports/live_latest/observation_waypoint_slice.simple_rrt.json
+localmap/scripts/run_planning_once.sh \
+  --mission mission/config/excavation_cycle.json \
+  --phase dig \
+  --planning-scope preview_global \
+  --dry-run
 ```
 
 RViz 中查看规划路径时，单独运行轨迹 marker 发布节点：

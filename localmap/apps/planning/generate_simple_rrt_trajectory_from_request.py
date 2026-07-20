@@ -15,6 +15,7 @@ PROJECT_ROOT = LOCALMAP_DIR.parents[1]
 sys.path.insert(0, str(LOCALMAP_DIR))
 
 from localmap_core.io import load_json, write_json
+from localmap_core.live_execution_planning import validate_execution_workspace_provenance
 from localmap_core.reachable_workspace import load_reachable_workspace
 from localmap_core.simple_bucket_tip_planner import PlanningBounds, plan_bucket_tip_path
 from localmap_core.trajectory import build_trajectory_command
@@ -22,19 +23,50 @@ from localmap_core.trajectory import build_trajectory_command
 
 DEFAULT_REQUEST = LOCALMAP_DIR / "exports" / "rrt_star_request.mock.json"
 DEFAULT_PROFILE = PROJECT_ROOT / "shared" / "machine_profile.json"
-DEFAULT_REACHABLE_WORKSPACE = PROJECT_ROOT / "shared" / "reachable_workspaces" / "scale_excavator_workspace.json"
+DEFAULT_REACHABLE_WORKSPACE = LOCALMAP_DIR / "config" / "reachable_workspace.machine_root_ros.derived.v1.json"
 DEFAULT_OUTPUT = LOCALMAP_DIR / "exports" / "trajectory_command.simple_rrt.json"
+DEFAULT_URDF = PROJECT_ROOT / "kinematics/waji_description/urdf/waji.urdf"
 
 
-def mask_obstacles_near_points(obstacles: list[dict], points: list[np.ndarray], radius_m: float) -> list[dict]:
-    """移除起点/目标附近的障碍物，用于允许bucket tip从当前位置出发并接近作业目标。"""
+def _distance_to_inflated_lidar_obstacle(
+    obstacle: dict,
+    point: np.ndarray,
+    collision_radius_m: float,
+) -> float:
+    """计算点到膨胀障碍物表面的最短距离；形状内部距离为0。"""
+    center = np.asarray(obstacle["center_m"], dtype=np.float64)
+    shape = obstacle.get("shape")
+    if shape == "box":
+        half_size = np.asarray(obstacle["size_m"], dtype=np.float64) * 0.5
+        outside = np.maximum(np.abs(point - center) - half_size - collision_radius_m, 0.0)
+        return float(np.linalg.norm(outside))
+    if shape == "sphere":
+        radius = float(obstacle["radius_m"]) + collision_radius_m
+        return max(0.0, float(np.linalg.norm(point - center)) - radius)
+    return max(0.0, float(np.linalg.norm(point - center)) - collision_radius_m)
+
+
+def mask_obstacles_near_points(
+    obstacles: list[dict],
+    points: list[np.ndarray],
+    radius_m: float,
+    collision_radius_m: float,
+) -> list[dict]:
+    """按膨胀形状移除点附近的实时雷达障碍物，不隐藏配置的禁入区。"""
     if radius_m <= 0.0:
         return obstacles
     filtered = []
     for obstacle in obstacles:
-        center = np.asarray(obstacle["center_m"], dtype=np.float64)
-        # 关键：OctoMap会把地面/土堆也记为occupied；dig目标附近需要mask，否则规划器无法到达目标。
-        if any(float(np.linalg.norm(center - point)) <= radius_m for point in points):
+        if obstacle.get("source") != "lidar":
+            filtered.append(obstacle)
+            continue
+        # OctoMap会把地面/土堆也记为occupied；掩膜距离必须与规划器使用的
+        # 碰撞膨胀形状一致，不能只比较voxel中心距离。
+        if any(
+            _distance_to_inflated_lidar_obstacle(obstacle, point, collision_radius_m)
+            <= radius_m
+            for point in points
+        ):
             continue
         filtered.append(obstacle)
     return filtered
@@ -46,10 +78,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--request", type=Path, default=DEFAULT_REQUEST, help="RRT*请求JSON")
     parser.add_argument("--machine-profile", type=Path, default=DEFAULT_PROFILE, help="机型profile路径")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="输出TrajectoryCommand JSON")
+    parser.add_argument(
+        "--planning-scope",
+        choices=["preview_global", "workspace_strict", "execution_strict"],
+        help="产物用途；省略时关闭可达域即preview_global，否则workspace_strict",
+    )
     parser.add_argument("--bounds", type=float, nargs=6, metavar=("X_MIN", "X_MAX", "Y_MIN", "Y_MAX", "Z_MIN", "Z_MAX"), help="规划边界，单位米，坐标系同request.frame_id")
     parser.add_argument("--reachable-workspace", type=Path, default=DEFAULT_REACHABLE_WORKSPACE, help="bucket tip可达区域JSON；默认复用shared/reachable_workspaces")
     parser.add_argument("--workspace-mode", choices=["MoveToDig", "CarryMaterial"], help="可达区域模式；默认跟task-mode一致")
     parser.add_argument("--disable-reachable-workspace", action="store_true", help="仅调试用：关闭bucket tip可达区域约束")
+    parser.add_argument(
+        "--workspace-disable-reason",
+        choices=["operator_temporary_workspace_invalid"],
+        help="execution_strict关闭临时可达域时必须记录的操作者原因",
+    )
     parser.add_argument("--waypoint-count", type=int, default=5, help="输出waypoint数量；不改变ONNX lookahead=3")
     parser.add_argument("--collision-radius", type=float, default=0.08, help="bucket tip/铲斗简化碰撞半径，单位米")
     parser.add_argument("--step-size", type=float, default=0.20, help="RRT树扩展步长，单位米")
@@ -67,6 +109,18 @@ def main() -> int:
     args = build_arg_parser().parse_args()
     request = load_json(args.request)
     machine_profile = load_json(args.machine_profile)
+    planning_scope = args.planning_scope or (
+        "preview_global" if args.disable_reachable_workspace else "workspace_strict"
+    )
+    if planning_scope == "preview_global" and not args.disable_reachable_workspace:
+        raise SystemExit("preview_global必须与--disable-reachable-workspace一起使用")
+    if planning_scope == "workspace_strict" and args.disable_reachable_workspace:
+        raise SystemExit("workspace_strict禁止关闭可达区域")
+    if planning_scope == "execution_strict" and args.disable_reachable_workspace:
+        if args.workspace_disable_reason != "operator_temporary_workspace_invalid":
+            raise SystemExit("execution_strict关闭可达区域必须记录操作者原因")
+    elif args.workspace_disable_reason is not None:
+        raise SystemExit("--workspace-disable-reason仅适用于关闭execution_strict可达区域")
 
     start = np.asarray(request["start_bucket_tip_base"], dtype=np.float64)
     goal = np.asarray(request["goal"]["position_m"], dtype=np.float64)
@@ -74,12 +128,27 @@ def main() -> int:
     workspace = None
     if not args.disable_reachable_workspace:
         workspace_mode = args.workspace_mode or request["task_mode"]
+        if planning_scope == "execution_strict":
+            validate_execution_workspace_provenance(
+                load_json(args.reachable_workspace),
+                DEFAULT_URDF.read_bytes(),
+            )
         workspace = load_reachable_workspace(args.reachable_workspace, mode=workspace_mode)
         if workspace.frame_id != request["frame_id"]:
             raise SystemExit(f"workspace frame {workspace.frame_id} 与 request frame {request['frame_id']} 不一致")
     obstacles = request.get("obstacles", [])
-    obstacles = mask_obstacles_near_points(obstacles, [start], args.mask_start_radius)
-    obstacles = mask_obstacles_near_points(obstacles, [goal], args.mask_goal_radius)
+    obstacles = mask_obstacles_near_points(
+        obstacles,
+        [start],
+        args.mask_start_radius,
+        args.collision_radius,
+    )
+    obstacles = mask_obstacles_near_points(
+        obstacles,
+        [goal],
+        args.mask_goal_radius,
+        args.collision_radius,
+    )
 
     result = plan_bucket_tip_path(
         start=start,
@@ -108,27 +177,42 @@ def main() -> int:
         waypoints_base=result.waypoints,
         target_threshold=float(request["planning_params"]["target_threshold"]),
         tube_radius=float(request["planning_params"]["tube_radius"]),
+        planning_scope=planning_scope,
+        mission=request["goal"].get("mission"),
     )
-    command["planner"] = {
-        "type": "simple_bucket_tip_rrt",
-        "reason": result.reason,
-        "iterations": result.iterations,
-        "collision_radius_m": float(args.collision_radius),
-        "input_obstacles": len(request.get("obstacles", [])),
-        "used_obstacles": len(obstacles),
-        "mask_start_radius_m": float(args.mask_start_radius),
-        "mask_goal_radius_m": float(args.mask_goal_radius),
-        "reachable_workspace": None
-        if workspace is None
-        else {
-            "path": str(args.reachable_workspace),
-            "mode": workspace.mode,
-            "frame_id": workspace.frame_id,
-            "bounds": workspace.bounds_values(),
-            "anchor_count": int(workspace.anchor_points().shape[0]),
-            "note": "RRT采样点、边和输出bucket-tip waypoints均受该可达体约束。",
+    command = {
+        **command,
+        "planner": {
+            "type": "simple_bucket_tip_rrt",
+            "reason": result.reason,
+            "iterations": result.iterations,
+            "collision_radius_m": float(args.collision_radius),
+            "input_obstacles": len(request.get("obstacles", [])),
+            "used_obstacles": len(obstacles),
+            "mask_start_radius_m": float(args.mask_start_radius),
+            "mask_goal_radius_m": float(args.mask_goal_radius),
+            "reachable_workspace": None
+            if workspace is None
+            else {
+                "path": str(args.reachable_workspace),
+                "mode": workspace.mode,
+                "frame_id": workspace.frame_id,
+                "bounds": workspace.bounds_values(),
+                "anchor_count": int(workspace.anchor_points().shape[0]),
+                "note": "RRT采样点、边和输出bucket-tip waypoints均受该可达体约束。",
+            },
+            "workspace_constraint": (
+                "disabled_by_operator"
+                if planning_scope == "execution_strict" and workspace is None
+                else "disabled_non_execution"
+                if workspace is None
+                else "field_validated"
+                if planning_scope == "execution_strict"
+                else "enforced_non_execution"
+            ),
+            "workspace_disable_reason": args.workspace_disable_reason,
+            "note": "第一版仅做bucket tip xyz避障，不做关节空间RRT*和自碰撞检查。",
         },
-        "note": "第一版仅做bucket tip xyz避障，不做关节空间RRT*和自碰撞检查。",
     }
     write_json(args.output, command)
 

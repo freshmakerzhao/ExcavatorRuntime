@@ -34,7 +34,7 @@
         "raw_topic",
         "raw_frame_id",
         "raw_point_type",
-        "machine_root",
+        "machine_root_ros",
         "extrinsics"
       ],
       "properties": {
@@ -345,6 +345,9 @@
         },
         "confidence": {
           "$ref": "#/$defs/confidence"
+        },
+        "mission": {
+          "$ref": "#/$defs/mission_reference"
         }
       }
     },
@@ -377,7 +380,20 @@
         },
         "confidence": {
           "$ref": "#/$defs/confidence"
+        },
+        "mission": {
+          "$ref": "#/$defs/mission_reference"
         }
+      }
+    },
+    "mission_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256", "phase"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "phase": {"enum": ["dig", "dump"]}
       }
     }
   }

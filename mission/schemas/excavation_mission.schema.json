@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rl-excavator.local/schemas/excavation_mission.schema.json",
+  "title": "Excavation Mission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mission_id",
+    "mission_type",
+    "frame_id",
+    "target_status",
+    "targets",
+    "limits"
+  ],
+  "properties": {
+    "schema_version": {"const": "excavation_mission.v1"},
+    "mission_id": {"type": "string", "minLength": 1},
+    "mission_type": {"const": "dig_transport_dump"},
+    "frame_id": {"const": "machine_root_ros"},
+    "target_status": {
+      "enum": ["placeholder", "rviz_adjusted", "field_validated"]
+    },
+    "targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dig", "dump"],
+      "properties": {
+        "dig": {"$ref": "#/$defs/target"},
+        "dump": {"$ref": "#/$defs/target"}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "waypoint_tolerance_m",
+        "waypoint_dwell_s",
+        "tracking_timeout_s",
+        "settle_s"
+      ],
+      "properties": {
+        "waypoint_tolerance_m": {"type": "number", "exclusiveMinimum": 0.0},
+        "waypoint_dwell_s": {"type": "number", "exclusiveMinimum": 0.0},
+        "tracking_timeout_s": {"type": "number", "exclusiveMinimum": 0.0},
+        "settle_s": {"type": "number", "exclusiveMinimum": 0.0}
+      }
+    }
+  },
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "number"},
+        {"type": "number"},
+        {"type": "number"}
+      ],
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position_m", "normal", "radius_m"],
+      "properties": {
+        "position_m": {"$ref": "#/$defs/vec3"},
+        "normal": {"$ref": "#/$defs/vec3"},
+        "radius_m": {"type": "number", "exclusiveMinimum": 0.0}
+      }
+    }
+  }
+}

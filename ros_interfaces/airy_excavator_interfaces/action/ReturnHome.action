@@ -1,0 +1,24 @@
+# Shadow ReturnHome observes a named joint pose; execution mode is fixed by bringup.
+string home_pose_id
+string pose_set_sha256
+---
+# Result is emitted only after the backend is quiescent and the shared lease is released.
+uint8 OUTCOME_SUCCEEDED=1
+uint8 OUTCOME_CANCELLED=2
+uint8 OUTCOME_FAILED=3
+uint8 outcome
+string reason_code
+string message
+float64 final_max_error_rad
+bool quiescence_confirmed
+uint64 action_datagrams
+---
+builtin_interfaces/Time joint_state_stamp
+string[] joint_names
+float64[] current_position_rad
+float64[] target_position_rad
+float64[] error_rad
+float64 max_error_rad
+float64 elapsed_s
+string state
+uint64 action_datagrams

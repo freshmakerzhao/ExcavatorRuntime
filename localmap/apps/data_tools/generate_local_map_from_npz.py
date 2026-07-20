@@ -17,8 +17,8 @@ from localmap_core.io import load_extrinsics, load_json, load_npz_points, write_
 
 
 DEFAULT_NPZ = LOCALMAP_DIR / "exports" / "rslidar_points_first_frame.npz"
-DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root.measured.json"
-DEFAULT_TARGETS = LOCALMAP_DIR / "config" / "targets.mock.json"
+DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root_ros.derived.v1.json"
+DEFAULT_TARGETS = LOCALMAP_DIR / "config" / "targets.machine_root_ros.derived.v1.json"
 DEFAULT_OUTPUT = LOCALMAP_DIR / "exports" / "local_map_from_npz.mock.json"
 
 

@@ -46,6 +46,7 @@ class MachineStatePacket:
     safety: dict[str, Any]
     actuator_state: dict[str, dict[str, float]]
     joint_state: dict[str, dict[str, float]]
+    stm32_stamp_ms: int | None = None
     raw_sensor: dict[str, Any] | None = None
     source: str = "orin"
     machine_id: str = "scale_excavator_v1"
@@ -55,8 +56,9 @@ class MachineStatePacket:
     def to_dict(self) -> dict[str, Any]:
         """转换为可 JSON 序列化的字典；raw_sensor 为空时不强制输出。"""
         data = asdict(self)
-        if data["raw_sensor"] is None:
-            data.pop("raw_sensor")
+        for key in ("stm32_stamp_ms", "raw_sensor"):
+            if data[key] is None:
+                data.pop(key)
         return data
 
     @property
@@ -171,6 +173,7 @@ def decode_machine_state_packet(data: dict[str, Any]) -> MachineStatePacket:
     raw_sensor = data.get("raw_sensor")
     if raw_sensor is not None and not isinstance(raw_sensor, dict):
         raise PacketDecodeError("raw_sensor 必须是字典")
+    stm32_stamp_ms = optional_int(data, "stm32_stamp_ms")
 
     return MachineStatePacket(
         seq=require_int(data, "seq"),
@@ -178,6 +181,7 @@ def decode_machine_state_packet(data: dict[str, Any]) -> MachineStatePacket:
         safety=safety,
         actuator_state=actuator_state,
         joint_state=joint_state,
+        stm32_stamp_ms=stm32_stamp_ms,
         raw_sensor=raw_sensor,
         source=str(data.get("source", "orin")),
         machine_id=str(data.get("machine_id", "scale_excavator_v1")),
@@ -337,6 +341,13 @@ def require_int(data: dict[str, Any], key: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise PacketDecodeError(f"{key} 必须是整数")
     return int(value)
+
+
+def optional_int(data: dict[str, Any], key: str) -> int | None:
+    """读取可选整数字段；缺失时保留为None，bool不算合法整数。"""
+    if key not in data:
+        return None
+    return require_int(data, key)
 
 
 def make_zero_action(seq: int, valid_for_ms: int = 100, stamp_ms: int | None = None) -> PolicyActionPacket:

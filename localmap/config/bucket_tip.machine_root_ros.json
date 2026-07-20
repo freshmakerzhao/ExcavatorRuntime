@@ -1,0 +1,9 @@
+{
+  "frame_id": "machine_root_ros",
+  "position_m": [0.5289, -0.1587, -0.0297],
+  "status": "placeholder_derived_from_unity_v1",
+  "notes": [
+    "仅供离线链路联调；真实验证必须使用 FK 的带源时间 bucket tip。",
+    "由旧 Unity placeholder 经 p_ros=(p_unity.z,-p_unity.x,p_unity.y) 重表达，不是现场重新测量。"
+  ]
+}

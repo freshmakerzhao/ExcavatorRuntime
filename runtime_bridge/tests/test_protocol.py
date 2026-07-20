@@ -109,6 +109,22 @@ class RuntimeBridgeProtocolTest(unittest.TestCase):
         self.assertEqual(packet.joint_position_rad, {"swing": 0.1, "boom": 0.2, "arm": 0.3, "bucket": 0.4})
         self.assertEqual(packet.joint_velocity_rad_s, {"swing": 0.0, "boom": 0.0, "arm": 0.0, "bucket": 0.0})
 
+    def test_machine_state_retains_stm32_source_tick_for_provenance(self):
+        raw = (
+            b'{"type":"machine_state_v1","schema_version":"1.0","seq":63,"stamp_ms":1783666906735,'
+            b'"stm32_stamp_ms":850104,'
+            b'"safety":{"estop":false,"stm32_alive":true,"sensor_valid":true,"control_enabled":false,"fault_flags":[]},'
+            b'"actuator_state":{"boom":{"position_m":0,"velocity_mps":0},"stick":{"position_m":0,"velocity_mps":0},'
+            b'"bucket":{"position_m":0,"velocity_mps":0},"swing":{"position_rad":0,"velocity_rad_s":0}},'
+            b'"joint_state":{"position_rad":{"swing":0,"boom":0,"arm":0,"bucket":0},'
+            b'"velocity_rad_s":{"swing":0,"boom":0,"arm":0,"bucket":0}}}'
+        )
+
+        packet = decode_packet(raw)
+
+        self.assertEqual(packet.stm32_stamp_ms, 850104)
+        self.assertEqual(decode_packet(encode_packet(packet)).stm32_stamp_ms, 850104)
+
     def test_decode_rejects_bad_safety_flags(self):
         raw = (
             b'{"type":"machine_state_v1","seq":1,"stamp_ms":2,'

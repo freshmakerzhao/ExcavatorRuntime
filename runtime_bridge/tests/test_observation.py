@@ -1,9 +1,20 @@
 import math
 import unittest
 
-from runtime_bridge.observation import BucketTipObservation, ObservationBuilder, normalize_position
+from runtime_bridge.observation import (
+    BucketTipObservation,
+    ObservationBuilder,
+    normalize_position,
+    position_observation_range,
+)
 from runtime_bridge.protocol import MachineStatePacket, decode_packet, encode_packet
-from runtime_bridge.apps.pc_policy_bridge import denormalize_policy_action, make_policy_action, should_send_policy
+from runtime_bridge.unity_observation_adapter import UnityObservationAdapter
+from runtime_bridge.apps.pc_policy_bridge import (
+    build_arg_parser,
+    denormalize_policy_action,
+    make_policy_action,
+    should_send_policy,
+)
 
 
 def sample_profile():
@@ -51,6 +62,88 @@ def sample_state(control_enabled=False):
 
 
 class ObservationBuilderTest(unittest.TestCase):
+    def test_ros_right_handed_spatial_inputs_preserve_unity_38d_observation(self):
+        adapter = UnityObservationAdapter()
+        unity_builder = ObservationBuilder(sample_profile(), task_mode="MoveToDig")
+        ros_builder = ObservationBuilder(sample_profile(), task_mode="MoveToDig")
+        unity_tip = BucketTipObservation((0.113, -0.226, 0.565), math.radians(90.0), stamp_ms=1000)
+        ros_tip = BucketTipObservation((0.565, -0.113, -0.226), math.radians(90.0), stamp_ms=1000)
+        unity_waypoints = [0.10, -0.20, 0.30, -0.40, 0.50, -0.60, 0.70, 0.80, -0.90, 0.2, 0.3, 0.0]
+        ros_waypoints = [0.30, -0.10, -0.20, -0.60, 0.40, 0.50, -0.90, -0.70, 0.80, 0.2, 0.3, 0.0]
+
+        unity_observation = unity_builder.build(
+            sample_state(), unity_tip, unity_waypoints, previous_action=[0.1, -0.2, 0.3, -0.4]
+        )
+        adapted_observation = ros_builder.build(
+            sample_state(),
+            adapter.bucket_tip_to_unity(ros_tip),
+            adapter.waypoint_values_to_unity(ros_waypoints),
+            previous_action=[0.1, -0.2, 0.3, -0.4],
+        )
+
+        self.assertEqual(adapted_observation, unity_observation)
+
+    def test_ros_right_handed_tip_velocity_preserves_unity_observation(self):
+        adapter = UnityObservationAdapter()
+        unity_builder = ObservationBuilder(sample_profile(), task_mode="MoveToDig")
+        ros_builder = ObservationBuilder(sample_profile(), task_mode="MoveToDig")
+        waypoints = [0.0] * 12
+        unity_first = BucketTipObservation((0.10, -0.20, 0.30), math.radians(30.0), stamp_ms=1000)
+        unity_second = BucketTipObservation((0.11, -0.18, 0.33), math.radians(48.0), stamp_ms=1100)
+        ros_first = BucketTipObservation((0.30, -0.10, -0.20), math.radians(30.0), stamp_ms=1000)
+        ros_second = BucketTipObservation((0.33, -0.11, -0.18), math.radians(48.0), stamp_ms=1100)
+
+        unity_builder.build(sample_state(), unity_first, waypoints, previous_action=[0.0] * 4)
+        ros_builder.build(
+            sample_state(), adapter.bucket_tip_to_unity(ros_first), waypoints, previous_action=[0.0] * 4
+        )
+        unity_observation = unity_builder.build(sample_state(), unity_second, waypoints, previous_action=[0.0] * 4)
+        adapted_observation = ros_builder.build(
+            sample_state(), adapter.bucket_tip_to_unity(ros_second), waypoints, previous_action=[0.0] * 4
+        )
+
+        self.assertEqual(adapted_observation, unity_observation)
+        for actual, expected in zip(adapted_observation[12:15], [2.0, 4.0, 6.0]):
+            self.assertAlmostEqual(actual, expected)
+
+    def test_ros_pose_adapter_uses_unity_signed_pitch_definition(self):
+        adapter = UnityObservationAdapter()
+
+        adapted_tip = adapter.ros_pose_to_unity_bucket_tip(
+            position_m=(0.565, -0.113, -0.226),
+            orientation_xyzw=(0.0, math.sin(math.pi / 4.0), 0.0, math.cos(math.pi / 4.0)),
+            stamp_ms=1784098376248,
+            swing_joint_rad=0.0,
+        )
+
+        self.assertEqual(adapted_tip.position_m, (0.113, -0.226, 0.565))
+        self.assertAlmostEqual(adapted_tip.pitch_rad, math.pi / 2.0)
+        self.assertEqual(adapted_tip.stamp_ms, 1784098376248)
+
+        opposite = adapter.ros_pose_to_unity_bucket_tip(
+            position_m=(0.0, 0.0, 0.0),
+            orientation_xyzw=(0.0, -math.sin(math.pi / 4.0), 0.0, math.cos(math.pi / 4.0)),
+            stamp_ms=1784098376249,
+            swing_joint_rad=0.0,
+        )
+        self.assertAlmostEqual(opposite.pitch_rad, -math.pi / 2.0)
+
+    def test_ros_pose_adapter_rejects_invalid_quaternion(self):
+        with self.assertRaisesRegex(ValueError, "quaternion"):
+            UnityObservationAdapter().ros_pose_to_unity_bucket_tip(
+                position_m=(0.0, 0.0, 0.0),
+                orientation_xyzw=(0.0, 0.0, 0.0, 0.0),
+                stamp_ms=1000,
+            )
+
+    def test_policy_bridge_requires_explicit_motion_enable(self):
+        parser = build_arg_parser()
+        defaults = parser.parse_args([])
+
+        self.assertEqual(set(vars(defaults)), {"config", "task_mode"})
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--enable-motion"])
+
     def test_builds_locked_38d_observation_indices(self):
         builder = ObservationBuilder(sample_profile(), task_mode="MoveToDig")
         waypoint_values = [i / 100.0 for i in range(12)]
@@ -100,7 +193,7 @@ class ObservationBuilderTest(unittest.TestCase):
         self.assertAlmostEqual(obs[37], 1.0)
 
     def test_action_packet_round_trips_and_safety_gate_defaults_to_zero_when_disabled(self):
-        send_policy, reason = should_send_policy(sample_state(control_enabled=False), allow_disabled=False)
+        send_policy, reason = should_send_policy(sample_state(control_enabled=False))
         self.assertFalse(send_policy)
         self.assertEqual(reason, "control_disabled")
 
@@ -117,6 +210,29 @@ class ObservationBuilderTest(unittest.TestCase):
 
     def test_normalize_position_respects_profile_sign(self):
         self.assertEqual(normalize_position(1.0, {"range": [0.0, 2.0], "sign": -1}), -0.0)
+
+    def test_deploy_absolute_encoder_range_overrides_unity_prismatic_range(self):
+        actuator = {
+            "range": [-0.095, 0.080],
+            "sign": 1,
+            "deploy_position_observation": {
+                "source": "stm32_absolute_cable_encoder",
+                "range": [0.140, 0.190],
+                "status": "firmware_safety_bounds",
+            },
+        }
+
+        self.assertEqual(position_observation_range(actuator), (0.140, 0.190))
+        self.assertAlmostEqual(normalize_position(0.1572, actuator), -0.312)
+
+    def test_rejects_malformed_deploy_position_observation(self):
+        actuator = {
+            "range": [-0.1, 0.1],
+            "deploy_position_observation": {"range": [0.2, 0.1]},
+        }
+
+        with self.assertRaisesRegex(ValueError, "deploy_position_observation"):
+            position_observation_range(actuator)
 
 
 if __name__ == "__main__":

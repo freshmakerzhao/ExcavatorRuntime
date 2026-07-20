@@ -1,0 +1,34 @@
+{
+  "schema": "planning_profile_v2",
+  "profile_id": "scale_excavator_live",
+  "inputs": {
+    "perception_profile": "localmap/config/perception.json",
+    "machine_profile": "../shared/machine_profile.json",
+    "reachable_workspace": "localmap/config/reachable_workspace.machine_root_ros.derived.v1.json"
+  },
+  "freshness": {
+    "local_map_max_age_ms": 1500,
+    "bucket_tip_max_age_ms": 500,
+    "octomap_timeout_s": 5.0
+  },
+  "obstacle_adapter": {
+    "box_size_m": 0.2,
+    "max_obstacles": 1000
+  },
+  "planner": {
+    "execution_workspace_mode": "disabled_by_operator",
+    "collision_radius_m": 0.05,
+    "step_size_m": 0.2,
+    "edge_check_step_m": 0.04,
+    "max_iterations": 6000,
+    "goal_sample_rate": 0.15,
+    "start_mask_radius_m": 0.15,
+    "goal_mask_radius_m": 0.45,
+    "waypoint_count": 5,
+    "seed": 8
+  },
+  "task_mode_by_target_kind": {
+    "dig": "MoveToDig",
+    "dump": "CarryMaterial"
+  }
+}

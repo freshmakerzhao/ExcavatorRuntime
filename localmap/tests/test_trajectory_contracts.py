@@ -17,10 +17,10 @@ class TrajectoryContractsTest(unittest.TestCase):
     def test_rrt_request_uses_local_map_targets_and_profile_thresholds(self):
         local_map = {
             "timestamp_s": 10.0,
-            "frame_id": "machine_root",
+            "frame_id": "machine_root_ros",
             "ground": {"model": {"type": "plane", "normal": [0.0, 0.0, 1.0], "offset_m": 0.0}, "confidence": 0.5},
             "obstacles": [{"id": "obs_1", "shape": "box", "center_m": [1.0, 0.0, 0.2], "size_m": [0.2, 0.2, 0.4], "confidence": 0.8}],
-            "dig_targets": [{"id": "dig_1", "position_m": [2.0, 0.0, 0.1], "normal": [0.0, 0.0, 1.0], "radius_m": 0.3, "confidence": 0.7}],
+            "dig_targets": [{"id": "dig_1", "position_m": [2.0, 0.0, 0.1], "normal": [0.0, 0.0, 1.0], "radius_m": 0.3, "confidence": 0.7, "mission": {"id": "cycle_1", "sha256": "a" * 64, "phase": "dig"}}],
             "dump_targets": [],
         }
         profile = {
@@ -39,9 +39,10 @@ class TrajectoryContractsTest(unittest.TestCase):
             task_mode="MoveToDig",
         )
 
-        self.assertEqual(request["frame_id"], "machine_root")
+        self.assertEqual(request["frame_id"], "machine_root_ros")
         self.assertEqual(request["start_bucket_tip_base"], [0.0, 0.0, 0.0])
         self.assertEqual(request["goal"]["id"], "dig_1")
+        self.assertEqual(request["goal"]["mission"]["sha256"], "a" * 64)
         self.assertEqual(request["planning_params"]["target_threshold"], 0.03)
         self.assertEqual(request["planning_params"]["tube_radius"], 0.04)
         self.assertEqual(len(request["obstacles"]), 1)
@@ -50,21 +51,25 @@ class TrajectoryContractsTest(unittest.TestCase):
         waypoints = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.1], [2.0, 0.0, 0.2]], dtype=np.float64)
         command = build_trajectory_command(
             timestamp_s=10.0,
-            frame_id="machine_root",
+            frame_id="machine_root_ros",
             task_mode="MoveToDig",
             target_bucket_pitch_deg=70.0,
             waypoints_base=waypoints,
             target_threshold=0.03,
             tube_radius=0.04,
+            mission={"id": "cycle_1", "sha256": "a" * 64, "phase": "dig"},
         )
 
-        self.assertEqual(command["frame_id"], "machine_root")
+        self.assertEqual(command["frame_id"], "machine_root_ros")
         self.assertEqual(command["waypoints_base"][2], [2.0, 0.0, 0.2])
         self.assertEqual(command["waypoint_count"], 3)
+        self.assertEqual(command["planning_scope"], "workspace_strict")
+        self.assertFalse(command["execution_eligible"])
+        self.assertEqual(command["mission"]["phase"], "dig")
 
     def test_waypoints_enter_observation_indices_15_to_26(self):
         trajectory = {
-            "frame_id": "machine_root",
+            "frame_id": "machine_root_ros",
             "waypoints_base": [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.0, 0.0, 0.0]],
             "waypoint_count": 3,
             "tube_radius": 0.5,
@@ -86,8 +91,9 @@ class TrajectoryContractsTest(unittest.TestCase):
 
         self.assertEqual(obs_slice["indices"], list(range(15, 27)))
         np.testing.assert_allclose(obs_slice["values"][0:9], [0.75, 0.0, 0.0, 1.25, 0.0, 0.0, 1.25, 0.0, 0.0])
-        self.assertAlmostEqual(obs_slice["values"][9], 1.0 / 3.0)
-        self.assertAlmostEqual(obs_slice["values"][10], 0.0)
+        self.assertAlmostEqual(obs_slice["values"][9], 0.5)
+        # Unity ClampedTubeCrossTrackRatio is distance / radius, clamped to [0, 1].
+        self.assertAlmostEqual(obs_slice["values"][10], 1.0)
         self.assertAlmostEqual(obs_slice["values"][11], 0.0)
 
 

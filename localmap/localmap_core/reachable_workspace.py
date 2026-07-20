@@ -1,4 +1,4 @@
-"""MachineRoot坐标系下的bucket tip可达区域工具。
+"""machine_root_ros坐标系下的bucket tip可达区域工具。
 
 Unity训练侧用20个anchor点定义bucket tip可达体；这里读取同一份JSON，
 用于约束真实感知链路中的RRT bucket tip waypoint。
@@ -36,7 +36,7 @@ class WorkspaceTetra:
 
 @dataclass(frozen=True)
 class ReachableWorkspace:
-    """bucket tip可达区域；所有点都在machine_root坐标系下。"""
+    """bucket tip可达区域；所有点都在machine_root_ros坐标系下。"""
 
     machine_id: str
     mode: str
@@ -139,11 +139,11 @@ def point_in_tetra(point: np.ndarray, vertices: np.ndarray, epsilon: float = 1e-
 
 
 def load_reachable_workspace(path: Path, mode: str = "MoveToDig") -> ReachableWorkspace:
-    """读取shared/reachable_workspaces中的指定任务模式可达区域。"""
+    """读取右手 ROS 规划所用的指定任务模式可达区域。"""
     data = load_json(path)
     frame_id = str(data["coordinate_frame"])
-    if frame_id != "machine_root":
-        raise ValueError(f"当前只接受machine_root可达区域，实际为: {frame_id}")
+    if frame_id != "machine_root_ros":
+        raise ValueError(f"当前只接受machine_root_ros可达区域，实际为: {frame_id}")
 
     for workspace in data["workspaces"]:
         if workspace["mode"] != mode:

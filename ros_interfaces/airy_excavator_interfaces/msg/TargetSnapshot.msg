@@ -1,0 +1,10 @@
+std_msgs/Header header
+string target_id
+string target_kind
+string target_status
+string mission_id
+string mission_sha256
+string mission_phase
+geometry_msgs/Point position
+geometry_msgs/Vector3 normal
+float64 radius_m

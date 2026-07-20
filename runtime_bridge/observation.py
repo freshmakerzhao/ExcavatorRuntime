@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -44,16 +45,52 @@ def clamp(value: float, lower: float = -1.0, upper: float = 1.0) -> float:
     return max(lower, min(upper, float(value)))
 
 
-def normalize_position(raw_position: float, actuator: dict[str, Any]) -> float:
-    """按 machine_profile 的 range 把缸位置映射到 [-1, 1]。"""
-    range_min, range_max = actuator["range"]
-    if range_min is None or range_max is None:
-        return 0.0
-    span = float(range_max) - float(range_min)
-    if abs(span) <= 1e-9:
-        return 0.0
+def position_observation_range(actuator: Mapping[str, Any]) -> tuple[float, float]:
+    """返回 PC 部署观测范围；未配置时回退到 Unity prismatic 范围。"""
+    deploy = actuator.get("deploy_position_observation")
+    field_name = "range"
+    configured_range = actuator.get("range")
+    if deploy is not None:
+        required_fields = {"source", "range", "status"}
+        optional_fields = {"command_to_encoder_velocity_sign"}
+        if (
+            not isinstance(deploy, Mapping)
+            or not required_fields.issubset(deploy)
+            or set(deploy) - required_fields - optional_fields
+        ):
+            raise ValueError("deploy_position_observation contract is invalid")
+        command_sign = deploy.get("command_to_encoder_velocity_sign")
+        if command_sign is not None and command_sign not in {-1, 1}:
+            raise ValueError("deploy_position_observation command sign is invalid")
+        if deploy.get("source") != "stm32_absolute_cable_encoder":
+            raise ValueError("deploy_position_observation source is invalid")
+        if deploy.get("status") not in {"firmware_safety_bounds", "field_calibrated"}:
+            raise ValueError("deploy_position_observation status is invalid")
+        configured_range = deploy.get("range")
+        field_name = "deploy_position_observation.range"
+    if (
+        not isinstance(configured_range, (list, tuple))
+        or len(configured_range) != 2
+        or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            for value in configured_range
+        )
+    ):
+        raise ValueError(f"{field_name} must contain two finite numbers")
+    lower, upper = (float(value) for value in configured_range)
+    if lower >= upper:
+        raise ValueError(f"{field_name} lower bound must be less than upper bound")
+    return lower, upper
+
+
+def normalize_position(raw_position: float, actuator: Mapping[str, Any]) -> float:
+    """按部署绝对编码器范围（或 Unity 回退范围）映射到 [-1, 1]。"""
+    range_min, range_max = position_observation_range(actuator)
+    span = range_max - range_min
     sign = float(actuator.get("sign", 1.0) or 1.0)
-    normalized = (float(raw_position) - float(range_min)) / span * 2.0 - 1.0
+    normalized = (float(raw_position) - range_min) / span * 2.0 - 1.0
     return clamp(normalized * sign)
 
 

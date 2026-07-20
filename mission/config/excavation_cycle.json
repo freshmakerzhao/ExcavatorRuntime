@@ -1,0 +1,25 @@
+{
+  "schema_version": "excavation_mission.v1",
+  "mission_id": "field_cycle_001",
+  "mission_type": "dig_transport_dump",
+  "frame_id": "machine_root_ros",
+  "target_status": "rviz_adjusted",
+  "targets": {
+    "dig": {
+      "position_m": [0.6, 0.3, 0.2],
+      "normal": [0.0, 0.0, 1.0],
+      "radius_m": 0.03
+    },
+    "dump": {
+      "position_m": [0.45, -0.3, -0.05],
+      "normal": [0.0, 0.0, 1.0],
+      "radius_m": 0.03
+    }
+  },
+  "limits": {
+    "waypoint_tolerance_m": 0.05,
+    "waypoint_dwell_s": 0.3,
+    "tracking_timeout_s": 20.0,
+    "settle_s": 0.5
+  }
+}

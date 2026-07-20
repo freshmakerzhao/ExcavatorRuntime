@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 
@@ -43,20 +43,23 @@ def build_rrt_star_request(
     target = select_target(local_map, target_id=target_id, target_kind=target_kind)
 
     # 关键：RRT*输入只包含语义地图、bucket tip起点和目标，不包含/rslidar_points原始点云。
+    goal = {
+        "id": target["id"],
+        "kind": target_kind,
+        "position_m": target["position_m"],
+        "normal": target["normal"],
+        "radius_m": target["radius_m"],
+        "confidence": target["confidence"],
+    }
+    if "mission" in target:
+        goal["mission"] = _copy_mission_reference(target["mission"])
     return {
         "schema_version": "rrt_star_request.v1",
         "timestamp_s": float(local_map["timestamp_s"]),
         "frame_id": local_map["frame_id"],
         "task_mode": task_mode,
         "start_bucket_tip_base": bucket_tip_base.astype(float).tolist(),
-        "goal": {
-            "id": target["id"],
-            "kind": target_kind,
-            "position_m": target["position_m"],
-            "normal": target["normal"],
-            "radius_m": target["radius_m"],
-            "confidence": target["confidence"],
-        },
+        "goal": goal,
         "ground": local_map["ground"],
         "obstacles": local_map["obstacles"],
         "planning_params": {
@@ -79,13 +82,17 @@ def build_trajectory_command(
     waypoints_base: np.ndarray,
     target_threshold: float,
     tube_radius: float,
+    planning_scope: str = "workspace_strict",
+    mission: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """构造RL tracker可消费的TrajectoryCommand。"""
     if waypoints_base.ndim != 2 or waypoints_base.shape[1] != 3:
         raise ValueError("waypoints_base必须是N x 3矩阵")
+    if planning_scope not in {"preview_global", "workspace_strict", "execution_strict"}:
+        raise ValueError(f"未知planning_scope: {planning_scope!r}")
 
     # 关键：waypoints_base必须和bucket_tip_base处于同一个frame_id，后续observation只算相对误差。
-    return {
+    command = {
         "schema_version": "trajectory_command.v1",
         "timestamp_s": float(timestamp_s),
         "frame_id": frame_id,
@@ -95,7 +102,32 @@ def build_trajectory_command(
         "waypoint_count": int(waypoints_base.shape[0]),
         "target_threshold": float(target_threshold),
         "tube_radius": float(tube_radius),
+        "planning_scope": planning_scope,
+        "execution_eligible": planning_scope == "execution_strict",
     }
+    if mission is not None:
+        command["mission"] = _copy_mission_reference(mission)
+    return command
+
+
+def _copy_mission_reference(value: Mapping[str, Any]) -> dict[str, str]:
+    """验证并复制跨 LocalMap/request/trajectory 的 Mission provenance。"""
+    if not isinstance(value, Mapping) or set(value) != {"id", "sha256", "phase"}:
+        raise ValueError("mission reference字段必须是id/sha256/phase")
+    identifier = value["id"]
+    sha256 = value["sha256"]
+    phase = value["phase"]
+    if not isinstance(identifier, str) or not identifier.strip():
+        raise ValueError("mission reference id不能为空")
+    if (
+        not isinstance(sha256, str)
+        or len(sha256) != 64
+        or any(character not in "0123456789abcdef" for character in sha256)
+    ):
+        raise ValueError("mission reference sha256必须是64位小写十六进制")
+    if phase not in {"dig", "dump"}:
+        raise ValueError("mission reference phase必须是dig或dump")
+    return {"id": identifier, "sha256": sha256, "phase": phase}
 
 
 def interpolate_waypoints(start: np.ndarray, goal: np.ndarray, waypoint_count: int) -> np.ndarray:
@@ -155,9 +187,10 @@ def compute_tube_signed(
     if tube_radius <= 0.0:
         return 1.0
 
-    # 关键：当前没有左右符号定义，先输出超出tube的比例；在tube内为0，超出后裁剪到1。
-    outside_distance = max(0.0, distance - tube_radius)
-    return float(np.clip(outside_distance / tube_radius, 0.0, 1.0))
+    # Unity training contract: ClampedTubeCrossTrackRatio is the full
+    # cross-track distance divided by the radius, not only the excess outside
+    # the tube. The current 3-D path has no left/right sign convention.
+    return float(np.clip(distance / tube_radius, 0.0, 1.0))
 
 
 def build_waypoint_observation_slice(
@@ -178,7 +211,7 @@ def build_waypoint_observation_slice(
 
     # 关键：ONNX仍是38维；这里只计算idx 15..23的未来3个waypoint相对tip误差。
     errors = (future_waypoints - bucket_tip_base.reshape(1, 3)) / distance_normalizer
-    progress = float(np.clip(current_waypoint_index / max(waypoint_count, 1), 0.0, 1.0))
+    progress = float(np.clip(current_waypoint_index / max(waypoint_count - 1, 1), 0.0, 1.0))
     tube_signed = compute_tube_signed(waypoints, bucket_tip_base, current_waypoint_index, tube_radius)
     is_final = 1.0 if current_waypoint_index >= waypoint_count - 1 else 0.0
 

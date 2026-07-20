@@ -1,0 +1,8 @@
+<library path="airy_mission_panel">
+  <class
+    name="airy_mission_panel/ExcavationPanel"
+    type="airy_mission_panel::ExcavationPanel"
+    base_class_type="rviz_common::Panel">
+    <description>Shadow-only operator panel for excavation Mission Actions.</description>
+  </class>
+</library>

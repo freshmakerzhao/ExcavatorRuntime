@@ -17,7 +17,7 @@ from localmap_core.geometry import rpy_to_rotation_matrix
 from localmap_core.io import load_extrinsics
 
 
-DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root.measured.json"
+DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root_ros.derived.v1.json"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

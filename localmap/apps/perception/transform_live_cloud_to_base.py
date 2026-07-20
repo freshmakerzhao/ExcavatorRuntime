@@ -35,9 +35,10 @@ sys.path.insert(0, str(LOCALMAP_DIR))
 
 from localmap_core.geometry import finite_xyz_mask, transform_xyzirt_points
 from localmap_core.io import load_extrinsics
+from localmap_core.replay_clock import select_cloud_header_stamp
 
 
-DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root.measured.json"
+DEFAULT_EXTRINSICS = LOCALMAP_DIR / "config" / "extrinsics_rslidar_to_machine_root_ros.derived.v1.json"
 POINT_FIELDS = ("x", "y", "z", "intensity", "ring", "timestamp")
 POINT_DTYPE = np.dtype(
     [
@@ -61,13 +62,18 @@ ROS_POINT_FIELDS = [
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """构造实时转换节点参数。"""
-    parser = argparse.ArgumentParser(description="实时发布machine_root/base坐标系下的PointCloud2。")
+    parser = argparse.ArgumentParser(description="实时发布machine_root_ros右手坐标系下的PointCloud2。")
     parser.add_argument("--input-topic", default="/rslidar_points", help="原始PointCloud2 topic")
-    parser.add_argument("--output-topic", default="/localmap/machine_root_points", help="转换后的PointCloud2 topic")
+    parser.add_argument("--output-topic", default="/localmap/machine_root_ros_points", help="转换后的PointCloud2 topic")
     parser.add_argument("--extrinsics", type=Path, default=DEFAULT_EXTRINSICS, help="rslidar到目标frame的外参JSON")
     parser.add_argument("--qos-reliability", choices=["reliable", "best_effort"], default="reliable", help="订阅/发布QoS可靠性")
     parser.add_argument("--tf-parent", default="world", help="静态TF父frame；用于让RViz认识目标frame")
     parser.add_argument("--no-static-tf", action="store_true", help="不发布world->目标frame的静态TF")
+    parser.add_argument(
+        "--restamp-for-replay",
+        action="store_true",
+        help="仅离线rosbag回放使用：输出header改为当前节点时间；真机禁止启用",
+    )
     parser.add_argument("--log-every", type=int, default=30, help="每处理多少帧打印一次统计；0表示关闭")
     return parser
 
@@ -122,6 +128,7 @@ class LiveCloudTransformer(Node):
         self.transform = load_extrinsics(args.extrinsics)
         self.output_topic = args.output_topic
         self.log_every = max(args.log_every, 0)
+        self.restamp_for_replay = bool(args.restamp_for_replay)
         self.frame_count = 0
         qos = make_qos(args.qos_reliability)
 
@@ -137,6 +144,10 @@ class LiveCloudTransformer(Node):
             f"{args.input_topic}({self.transform.from_frame}) -> "
             f"{args.output_topic}({self.transform.to_frame}), extrinsics={args.extrinsics}"
         )
+        if self.restamp_for_replay:
+            self.get_logger().warning(
+                "replay restamp enabled: 输出header使用当前节点时间；该模式禁止用于真机"
+            )
 
     def publish_static_identity_tf(self, parent_frame: str, child_frame: str) -> None:
         """发布一个静态TF，让RViz能够识别目标frame。"""
@@ -171,7 +182,12 @@ class LiveCloudTransformer(Node):
         raw_points = point_cloud2.read_points(message, field_names=POINT_FIELDS, skip_nans=False)
         matrix = structured_points_to_matrix(raw_points)
         transformed = transform_xyzirt_points(matrix, self.transform)
-        output = create_xyzirt_cloud(transformed, message.header.stamp, self.transform.to_frame)
+        output_stamp = select_cloud_header_stamp(
+            message.header.stamp,
+            self.get_clock().now().to_msg(),
+            replay_restamp=self.restamp_for_replay,
+        )
+        output = create_xyzirt_cloud(transformed, output_stamp, self.transform.to_frame)
         self.publisher.publish(output)
 
         self.frame_count += 1
